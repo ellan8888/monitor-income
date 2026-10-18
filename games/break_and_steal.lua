@@ -599,48 +599,62 @@ task.spawn(function()
 
                 -- ⭐ LOGIKA AUTO JUMP (TREADMILL STUCK)
         -- Jalan HANYA kalau Auto Farm udah mati & lagi monitoring
-        if isAutoJumpEnabled or (is_farm_stopped and is_monitoring) then
-            local currentSpeedNum = parseNumber(speed_str) 
+                -- ⭐ LOGIKA AUTO JUMP (TREADMILL STUCK)
+        -- 1. Tombol manual ON, ATAU
+        -- 2. Auto Farm sudah mati (target tercapai)
+        if (isAutoJumpEnabled) or (is_farm_stopped) then
+            -- Cek apakah kita lagi dalam mode monitor ATAU manual
+            local isAllowedToJump = false
             
-            -- 1. Deteksi apakah speed pernah naik (treadmill sempat jalan)
-            if currentSpeedNum > lastSpeedCheck then
-                if not hasSpeedIncreased then
-                    print("✅ Speed terdeteksi naik! Auto Jump aktif.")
-                    hasSpeedIncreased = true
-                end
-                stuckTimer = 0
-                lastSpeedCheck = currentSpeedNum
-            else
-                -- Speed stagnan (diam)
-                -- Baru ngitung stuck kalau speed pernah naik
-                if hasSpeedIncreased then
-                    stuckTimer = stuckTimer + INTERVAL
+            if isAutoJumpEnabled then
+                -- Kalau manual ON, boleh loncat kapan aja
+                isAllowedToJump = true
+            elseif is_farm_stopped then
+                -- Kalau mode monitor, hanya boleh loncat kalau sedang monitoring
+                if is_monitoring then
+                    isAllowedToJump = true
                 end
             end
 
-            -- 2. Kalau stuck lebih dari 4 detik, paksa loncat!
-            if hasSpeedIncreased and stuckTimer >= 6 then
-                local char = player.Character
-                local humanoid = char and char:FindFirstChild("Humanoid")
-                if humanoid then
-                    -- 1. Paksa berdiri dulu (kalau lagi duduk)
-                    humanoid.Sit = false
-                    humanoid.PlatformStand = false
-                    
-                    -- 2. Kasih jeda super singkat biar game sempet proses "berdiri"
-                    task.wait(0.1) 
-                    
-                    -- 3. Baru loncat!
-                    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                    
-                    print("🦘 Speed stuck di Treadmill! Loncat 1x...")
+            if isAllowedToJump then
+                local currentSpeedNum = parseNumber(speed_str) 
+                
+                -- 1. Deteksi apakah speed pernah naik
+                if currentSpeedNum > lastSpeedCheck then
+                    if not hasSpeedIncreased then
+                        print("✅ Speed terdeteksi naik! Auto Jump aktif.")
+                        hasSpeedIncreased = true
+                    end
+                    stuckTimer = 0
+                    lastSpeedCheck = currentSpeedNum
+                else
+                    if hasSpeedIncreased then
+                        stuckTimer = stuckTimer + INTERVAL
+                    end
                 end
+
+                -- 2. Kalau stuck lebih dari 6 detik, paksa loncat!
+                if hasSpeedIncreased and stuckTimer >= 6 then
+                    local char = player.Character
+                    local humanoid = char and char:FindFirstChild("Humanoid")
+                    if humanoid then
+                        humanoid.Sit = false
+                        humanoid.PlatformStand = false
+                        task.wait(0.1) 
+                        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                        print("🦘 Speed stuck di Treadmill! Loncat 1x...")
+                    end
+                    stuckTimer = 0
+                end
+            else
                 stuckTimer = 0
+                hasSpeedIncreased = false
+                lastSpeedCheck = 0
             end
         else
-            -- Kalau Auto Farm nyala, reset state
+            -- Kalau Auto Farm masih nyala (ngejar target), jangan loncat
             stuckTimer = 0
-            hasSpeedIncreased = false 
+            hasSpeedIncreased = false
             lastSpeedCheck = 0
         end
 
