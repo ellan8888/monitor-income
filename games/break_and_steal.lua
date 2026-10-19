@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (Glassmorphism v69 - Final)
+-- ✨ V-Ziir0 Hub: Break & Steal (Glassmorphism v83 - Toggle Logo)
 -- ═══════════════════════════════════════════════════════
 
 local player = game.Players.LocalPlayer
@@ -8,6 +8,7 @@ local CoreGui = game:GetService("CoreGui")
 local StarterGui = game:GetService("StarterGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1560789097440616529/097v0ksImZfYm2g4zSQKbEvb-9ttIwSHah-v5nxavKklco3t5S71rMR9vySSjOwtMEEn"
 local INTERVAL = 2 
@@ -21,7 +22,7 @@ local targetIncome = 0
 local targetSpeedValue = 0
 local is_speed_done = false 
 local is_income_done = false 
-local is_buying_pickaxe = false -- ⭐ Flag kalau lagi ngejar duit buat beli
+local is_buying_pickaxe = false 
 local activeProfileName = "None"
 local is_farm_stopped = false
 local lastMoney, lastSpeed = nil, nil
@@ -234,7 +235,6 @@ local function startAutoFarm()
         if getgenv().AutoFarmEgg then getgenv().AutoFarmEgg = true end
     end)
     
-    -- Coba klik checkbox UI kalo ada
     local targetLabel = nil
     for _, gui in pairs(CoreGui:GetDescendants()) do
         if gui:IsA("TextLabel") and gui.Text:lower() == "auto farm eggs" then 
@@ -261,7 +261,6 @@ local function onTargetReached()
     showNotif("🛑 TARGET TERCAPAI", "Auto Farm dimatikan untuk target " .. tostring(activeProfileName), 5)
 end
 
--- ⭐ FUNGSI AUTO BUY (LANGKAH 4 UDAH DIPASANG)
 local function tryBuyPickaxe()
     if not autoBuyEnabled then return end
     local currentMoney = getRealCash()
@@ -288,7 +287,6 @@ local function tryBuyPickaxe()
         buyStatus = "✅ Beli Sukses!"
         autoBuyEnabled = false 
         
-        -- ⭐ LANGKAH 4: BALIKIN KE TREADMILL SETELAH BELI
         if is_monitoring then
             is_farm_stopped = true 
             is_speed_done = false 
@@ -309,7 +307,7 @@ local function tryBuyPickaxe()
 end
 
 -- ═══════════════════════════════════════════════════════
--- ⭐ UI CUSTOM (GLASSMORPHISM v69)
+-- ⭐ UI CUSTOM (GLASSMORPHISM v83)
 -- ═══════════════════════════════════════════════════════
 local Colors = {
     Background = Color3.fromRGB(20, 20, 25),     
@@ -321,11 +319,14 @@ local Colors = {
     SwitchOff = Color3.fromRGB(60, 60, 70),
 }
 
+-- ⭐ PERBAIKAN UTAMA: DisplayOrder
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "VZiir0HubGlass"
 ScreenGui.ResetOnSpawn = false
+ScreenGui.DisplayOrder = 999 -- ⭐ PAKSA UI SELALU DI PALING ATAS
 ScreenGui.Parent = CoreGui
 
+-- MAIN FRAME
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, 400, 0, 320) 
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -546,7 +547,7 @@ local function CreateSwitchToggle(parent, name, layoutOrder, defaultState, callb
     }
 end
 
--- ⭐ TAB 1: HOME
+-- TAB 1: HOME
 local HomeTab = Instance.new("ScrollingFrame")
 HomeTab.Size = UDim2.new(1, -10, 1, -10)
 HomeTab.Position = UDim2.new(0, 5, 0, 5)
@@ -637,7 +638,7 @@ BuyStatusLbl.TextSize = 10
 BuyStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
 BuyStatusLbl.Parent = MainFrame
 
--- ⭐ TAB 2: AUTO BUY
+-- TAB 2: AUTO BUY
 local AutoBuyTab = Instance.new("ScrollingFrame")
 AutoBuyTab.Size = UDim2.new(1, -10, 1, -10)
 AutoBuyTab.Position = UDim2.new(0, 5, 0, 5)
@@ -716,7 +717,7 @@ DropdownBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- ⭐ LOGIKA PINDAH TAB
+-- LOGIKA PINDAH TAB
 HomeBtn.MouseButton1Click:Connect(function() 
     SetHomeActive(true); SetAutoBuyActive(false)
     HomeTab.Visible = true; AutoBuyTab.Visible = false
@@ -729,30 +730,76 @@ end)
 
 SetHomeActive(true)
 
--- ⭐ LOGIKA MINIMIZE
-local isMinimized = false
-MinBtn.MouseButton1Click:Connect(function()
-    isMinimized = not isMinimized
-    if isMinimized then
-        Sidebar.Visible = false
-        ContentArea.Visible = false
-        StatusLbl.Visible = false
-        BuyStatusLbl.Visible = false
-        MainFrame.Size = UDim2.new(0, 400, 0, 30)
-        MinBtn.Text = "▢"
-    else
-        Sidebar.Visible = true
-        ContentArea.Visible = true
-        StatusLbl.Visible = true
-        BuyStatusLbl.Visible = true
-        MainFrame.Size = UDim2.new(0, 400, 0, 320)
-        MinBtn.Text = "—"
+-- ⭐ -- ⭐ TOMBOL FLOATING (LOGO) - DIBUAT PALING BAWAH
+local FloatingBtn = Instance.new("ImageButton")
+FloatingBtn.Size = UDim2.new(0, 50, 0, 50)
+FloatingBtn.Position = UDim2.new(0, 20, 0, 20) 
+FloatingBtn.BackgroundTransparency = 0
+FloatingBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+FloatingBtn.Image = "rbxassetid://71161700474373"
+FloatingBtn.Visible = true 
+FloatingBtn.ZIndex = 100 
+FloatingBtn.Parent = ScreenGui
+Instance.new("UICorner", FloatingBtn).CornerRadius = UDim.new(1, 0)
+
+-- ⭐ SISTEM DRAG & KLIK YANG BENER (ANTI BENTROK) ⭐
+local draggingFloating = false
+local dragStartPos = nil
+local startPos = nil
+local isDragging = false -- Flag untuk ngecek apakah user beneran nge-drag
+
+FloatingBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        draggingFloating = true
+        isDragging = false -- Reset flag drag
+        dragStartPos = input.Position
+        startPos = FloatingBtn.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                draggingFloating = false
+            end
+        end)
     end
 end)
 
--- ═══════════════════════════════════════════════════════
+UserInputService.InputChanged:Connect(function(input)
+    if draggingFloating and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStartPos
+        -- Cek kalau pergerakannya lebih dari 5 pixel, anggap ini drag
+        if delta.Magnitude > 5 then
+            isDragging = true
+        end
+        
+        FloatingBtn.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- FUNGSI KLIK LOGO UNTUK TOGGLE BUKA/TUTUP UI
+FloatingBtn.MouseButton1Click:Connect(function()
+    -- Kalau tadi beneran nge-drag (geser), jangan buka/tutup UI
+    if isDragging then return end
+    
+    -- Logic Toggle: Kalau UI lagi kebuka, tutup. Kalau ketutup, buka.
+    if MainFrame.Visible then
+        MainFrame.Visible = false
+    else
+        MainFrame.Visible = true
+        MainFrame.Size = UDim2.new(0, 400, 0, 320)
+    end
+end)
+
+-- LOGIKA MINIMIZE (Tombol strip)
+local isMinimized = false
+MinBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+    -- Logo biarkan tetap terlihat
+end)
+
 -- LOOP UTAMA
--- ═══════════════════════════════════════════════════════
 task.spawn(function()
     print("✅ Monitor Break & Steal berjalan!")
 
@@ -766,11 +813,10 @@ task.spawn(function()
             StatusLbl.Text = "Status: Pilih target monitor di atas."
         end
         
-                -- ⭐ LOGIKA AUTO RE-FARM & TARGET SPEED (FIXED)
+        -- LOGIKA AUTO RE-FARM & TARGET SPEED (FIXED)
         if is_monitoring then
             local speed_num = parseNumber(speed_str)
             
-            -- 1. Cek Income (HANYA kalau nggak lagi ngejar duit buat beli kapak)
             if not is_buying_pickaxe and not is_income_done and (money_num >= targetIncome) then
                 is_income_done = true 
                 onTargetReached()
@@ -778,7 +824,6 @@ task.spawn(function()
                 is_speed_done = false 
             end
 
-            -- 2. Cek Speed (pas lagi treadmill)
             if is_farm_stopped and not is_speed_done and targetSpeedValue > 0 then
                 if speed_num >= targetSpeedValue then
                     is_speed_done = true
@@ -791,18 +836,13 @@ task.spawn(function()
                             is_farm_stopped = false 
                             is_income_done = true 
                             is_buying_pickaxe = true 
-                            
-                            -- ⭐ NYALAIN AUTO FARM LAGI
                             startAutoFarm() 
-                            
                             showNotif("🔄 AUTO RE-FARM", "Speed tercapai, tapi uang belum cukup. Lanjut farming!", 5)
                         end
                     end
                 end
             end
         end
-
-        
 
         if money_str ~= lastMoney or speed_str ~= lastSpeed then
             if (os.time() - lastWebhookTime) >= 15 then
