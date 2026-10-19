@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- 🔒 V-Ziir0 Hub: Break & Steal (Remote Auto Buy v55)
+-- ✨ V-Ziir0 Hub: Break & Steal (Glassmorphism v69 - Final)
 -- ═══════════════════════════════════════════════════════
 
 local player = game.Players.LocalPlayer
@@ -7,6 +7,7 @@ local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local StarterGui = game:GetService("StarterGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1560789097440616529/097v0ksImZfYm2g4zSQKbEvb-9ttIwSHah-v5nxavKklco3t5S71rMR9vySSjOwtMEEn"
 local INTERVAL = 2 
@@ -17,15 +18,17 @@ if not httpFn then warn("❌ Nggak ada fungsi request!"); return end
 -- ⭐ STATE GLOBAL
 local is_monitoring = false
 local targetIncome = 0
+local targetSpeedValue = 0
+local is_speed_done = false 
+local is_income_done = false 
+local is_buying_pickaxe = false -- ⭐ Flag kalau lagi ngejar duit buat beli
 local activeProfileName = "None"
 local is_farm_stopped = false
 local lastMoney, lastSpeed = nil, nil
-local lastWebhookTime = 0  -- ⭐ TAMBAHKAN INI
--- ⭐ TAMBAHKAN INI
+local lastWebhookTime = 0 
 local lastSpeedCheck = 0
 local stuckTimer = 0
 local hasSpeedIncreased = false
--- ⭐ STATE AUTO JUMP MANUAL
 local isAutoJumpEnabled = false
 
 -- ⭐ STATE AUTO BUY
@@ -35,22 +38,10 @@ local targetPickaxeId = 7
 local targetBuyPrice = 2000 * 1e15 
 local buyStatus = "None"
 
--- ⭐ DATABASE CONFIG (SMART AUTO BUY)
+-- ⭐ DATABASE CONFIG
 local CONFIG_DB = {
-    { 
-        name = "Max Account (Income 2T)", 
-        amount = 2e12, 
-        pickaxeId = 20, -- Enchanted
-        pickaxeName = "Enchanted ($200Qa)",
-        pickaxePrice = 200 * 1e15 
-    },
-    { 
-        name = "Akun Income 1T", 
-        amount = 1e12, 
-        pickaxeId = 18, -- Enchanted
-        pickaxeName = "Celestial ($20Qa)",
-        pickaxePrice = 20 * 1e15 
-    }
+    { name = "Max Account (Income 2T)", amount = 2e12, targetSpeed = 1e12, pickaxeId = 20, pickaxeName = "Enchanted ($200Qa)", pickaxePrice = 200 * 1e15 },
+    { name = "Akun Income 1T", amount = 1e12, targetSpeed = 500e9, pickaxeId = 18, pickaxeName = "Celestial ($20Qa)", pickaxePrice = 20 * 1e15 }
 }
 
 -- ⭐ DATABASE PICKAXE
@@ -76,21 +67,15 @@ local PICKAXE_DB = {
     { name = "Enchanted", id = 20, priceStr = "$200Qa", priceRaw = 200 * 1e15 },
 }
 
--- ═══════════════════════════════════════════════════════
 -- FUNGSI PENDUKUNG
--- ═══════════════════════════════════════════════════════
 local function showNotif(title, text, duration)
-    pcall(function()
-        StarterGui:SetCore("SendNotification", { Title = title, Text = text, Duration = duration or 5 })
-    end)
+    pcall(function() StarterGui:SetCore("SendNotification", { Title = title, Text = text, Duration = duration or 5 }) end)
 end
 
 local function sendWebhook(payload)
     local body = HttpService:JSONEncode(payload)
     for attempt = 1, 3 do
-        local ok, result = pcall(function()
-            return httpFn({ Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = body })
-        end)
+        local ok, result = pcall(function() return httpFn({ Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = body }) end)
         if ok then
             local status = nil
             if type(result) == "table" then status = result.Status or result.StatusCode end
@@ -112,15 +97,12 @@ end
 
 local function cleanNumber(str)
     if not str then return "0" end
-    str = tostring(str)
-    str = str:gsub("[^%d%a%.%,]", "")
-    str = str:gsub("[sS]$", "")
+    str = tostring(str):gsub("[^%d%a%.%,]", ""):gsub("[sS]$", "")
     return str ~= "" and str or "0"
 end
 
 local function parseNumber(str)
-    local s = tostring(str):upper():gsub("[$S/]", ""):gsub("%s", "")
-    s = s:gsub(",", ".")
+    local s = tostring(str):upper():gsub("[$S/]", ""):gsub("%s", ""):gsub(",", ".")
     local mult = 1
     if s:find("K") then mult = 1e3; s = s:gsub("K","")
     elseif s:find("M") then mult = 1e6; s = s:gsub("M","")
@@ -137,11 +119,8 @@ local function getMyData()
     if ls then
         for _, stat in ipairs(ls:GetChildren()) do
             local n = stat.Name:lower()
-            if n:find("money") or n:find("cash") or n:find("income") then
-                money = formatNumber(cleanNumber(stat.Value))
-            elseif n:find("speed") or n:find("kecepatan") then
-                speed = formatNumber(cleanNumber(stat.Value))
-            end
+            if n:find("money") or n:find("cash") or n:find("income") then money = formatNumber(cleanNumber(stat.Value))
+            elseif n:find("speed") or n:find("kecepatan") then speed = formatNumber(cleanNumber(stat.Value)) end
         end
         if money ~= "0" and speed ~= "0" then return money, speed end
     end
@@ -153,9 +132,7 @@ local function getMyData()
                     if frame:IsA("Frame") and (frame.Name:lower():find("leader") or frame.Name:lower():find("board") or frame.Name:lower():find("player")) then
                         local texts = {}
                         for _, txt in ipairs(frame:GetDescendants()) do
-                            if (txt:IsA("TextLabel") or txt:IsA("TextBox")) and txt.Text ~= "" then
-                                table.insert(texts, txt.Text)
-                            end
+                            if (txt:IsA("TextLabel") or txt:IsA("TextBox")) and txt.Text ~= "" then table.insert(texts, txt.Text) end
                         end
                         for i, t in ipairs(texts) do
                             local lowerT = t:lower()
@@ -177,7 +154,6 @@ local function getMyData()
     return money, speed
 end
 
--- ⭐ FUNGSI PEMBACA UANG (FINAL)
 local function getRealCash()
     local pg = player:FindFirstChild("PlayerGui")
     if not pg then return 0 end
@@ -191,20 +167,15 @@ local function getRealCash()
     if not amountText or not amountText:IsA("TextLabel") then return 0 end
     local rawText = amountText.Text
     local numberPart = rawText:match("%$(.*)")
-    if numberPart then
-        return parseNumber(numberPart:gsub("%s", ""))
-    end
+    if numberPart then return parseNumber(numberPart:gsub("%s", "")) end
     return 0
 end
 
 local function sendToDiscord(money, speed, status_text)
-    -- ⭐ Siapin teks buat progress kapak
     local pickaxeInfo = "None"
     local pickaxeProgress = "-"
-    
     if autoBuyEnabled then
         pickaxeInfo = targetPickaxeName
-        -- Ambil sisa uang & target harga dari fungsi getRealCash
         local currentCash = getRealCash()
         pickaxeProgress = formatNumber(currentCash) .. " / " .. formatNumber(targetBuyPrice)
     end
@@ -217,12 +188,9 @@ local function sendToDiscord(money, speed, status_text)
             { name = "💰 ▸ INCOME", value = "```yaml\n" .. tostring(money) .. "```", inline = true },
             { name = "⚡ ▸ SPEED", value = "```yaml\n" .. tostring(speed) .. "```", inline = true },
             { name = "🎯 ▸ PROFILE", value = "```yaml\n" .. tostring(activeProfileName or "None") .. "```", inline = true },
-            
-            -- ⭐ FIELD BARU BUAT AUTO BUY
             { name = "🛒 ▸ TARGET PICKAXE", value = "```yaml\n" .. tostring(pickaxeInfo) .. "```", inline = true },
             { name = "⏳ ▸ PROGRESS BUY", value = "```yaml\n" .. tostring(pickaxeProgress) .. "```", inline = true },
-            { name = " ", value = " ", inline = true }, -- Spacer kosong biar rapi
-            
+            { name = " ", value = " ", inline = true },
             { name = "📌 ▸ STATUS", value = "```diff\n" .. (status_text or "+ FARMING ACTIVE") .. "```", inline = false },
         },
         footer = { text = "V-Ziir0 Hub • " .. os.date("%H:%M:%S") },
@@ -242,9 +210,7 @@ local function stopAutoFarm()
     end)
     local targetLabel = nil
     for _, gui in pairs(CoreGui:GetDescendants()) do
-        if gui:IsA("TextLabel") and gui.Text:lower() == "auto farm eggs" then
-            targetLabel = gui; break
-        end
+        if gui:IsA("TextLabel") and gui.Text:lower() == "auto farm eggs" then targetLabel = gui; break end
     end
     if targetLabel then
         local parent = targetLabel.Parent
@@ -258,20 +224,46 @@ local function stopAutoFarm()
     end
 end
 
+local function startAutoFarm()
+    print("🚀 Mencoba nyalain Auto Farm...")
+    pcall(function()
+        if getgenv().AutoFarm then getgenv().AutoFarm = true end
+        if getgenv().Farm then getgenv().Farm = true end
+        if _G.AutoFarm then _G.AutoFarm = true end
+        if shared.AutoFarm then shared.AutoFarm = true end
+        if getgenv().AutoFarmEgg then getgenv().AutoFarmEgg = true end
+    end)
+    
+    -- Coba klik checkbox UI kalo ada
+    local targetLabel = nil
+    for _, gui in pairs(CoreGui:GetDescendants()) do
+        if gui:IsA("TextLabel") and gui.Text:lower() == "auto farm eggs" then 
+            targetLabel = gui; 
+            break 
+        end
+    end
+    if targetLabel then
+        local parent = targetLabel.Parent
+        for _, sibling in pairs(parent:GetChildren()) do
+            if (sibling:IsA("TextButton") or sibling:IsA("ImageButton")) and sibling.AbsolutePosition.X < targetLabel.AbsolutePosition.X then
+                pcall(function() firesignal(sibling.MouseButton1Click) end)
+                pcall(function() sibling:Activate() end)
+                break
+            end
+        end
+    end
+    showNotif("🚀 AUTO FARM", "Auto Farm dinyalakan lagi!", 5)
+end
+
 local function onTargetReached()
     is_farm_stopped = true
     stopAutoFarm()
     showNotif("🛑 TARGET TERCAPAI", "Auto Farm dimatikan untuk target " .. tostring(activeProfileName), 5)
 end
 
-
-
--- ═══════════════════════════════════════════════════════
--- ⭐ FUNGSI AUTO BUY
--- ═══════════════════════════════════════════════════════
+-- ⭐ FUNGSI AUTO BUY (LANGKAH 4 UDAH DIPASANG)
 local function tryBuyPickaxe()
     if not autoBuyEnabled then return end
-    
     local currentMoney = getRealCash()
     local money_str = formatNumber(currentMoney)
     
@@ -281,7 +273,6 @@ local function tryBuyPickaxe()
     end
     
     buyStatus = "⚡ MEMBELI..."
-    
     local ok, err = pcall(function()
         local Event = ReplicatedStorage:FindFirstChild("PickaxeShopRequest")
         if Event then
@@ -296,6 +287,15 @@ local function tryBuyPickaxe()
         showNotif("🛒 AUTO BUY BERHASIL", "Kamu telah membeli " .. targetPickaxeName .. "!", 5)
         buyStatus = "✅ Beli Sukses!"
         autoBuyEnabled = false 
+        
+        -- ⭐ LANGKAH 4: BALIKIN KE TREADMILL SETELAH BELI
+        if is_monitoring then
+            is_farm_stopped = true 
+            is_speed_done = false 
+            is_income_done = false 
+            is_buying_pickaxe = false
+        end
+        
         task.wait(1)
         pcall(function()
             local Event = ReplicatedStorage:FindFirstChild("PickaxeShopRequest")
@@ -309,176 +309,368 @@ local function tryBuyPickaxe()
 end
 
 -- ═══════════════════════════════════════════════════════
--- ⭐ UI CUSTOM
+-- ⭐ UI CUSTOM (GLASSMORPHISM v69)
 -- ═══════════════════════════════════════════════════════
 local Colors = {
-    Background = Color3.fromRGB(20, 20, 20),
-    Secondary = Color3.fromRGB(30, 30, 30),
-    Text = Color3.fromRGB(240, 240, 240),
-    TextDim = Color3.fromRGB(150, 150, 150),
+    Background = Color3.fromRGB(20, 20, 25),     
+    GlassPanel = Color3.fromRGB(40, 40, 50),     
+    Border = Color3.fromRGB(255, 255, 255),      
+    Accent = Color3.fromRGB(120, 200, 255),      
+    Text = Color3.fromRGB(255, 255, 255),
+    TextDim = Color3.fromRGB(180, 180, 190),
+    SwitchOff = Color3.fromRGB(60, 60, 70),
 }
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "VZiir0Hub"
+ScreenGui.Name = "VZiir0HubGlass"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = CoreGui
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 350, 0, 500) 
-MainFrame.Position = UDim2.new(0.5, -175, 0.5, -250)
+MainFrame.Size = UDim2.new(0, 400, 0, 320) 
+MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.BackgroundColor3 = Colors.Background
+MainFrame.BackgroundTransparency = 0.1
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.Parent = ScreenGui
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 
-local TopBar = Instance.new("Frame")
-TopBar.Size = UDim2.new(1, 0, 0, 40)
-TopBar.BackgroundColor3 = Colors.Secondary
-TopBar.Parent = MainFrame
-Instance.new("UICorner", TopBar).CornerRadius = UDim.new(0, 10)
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 12)
+MainCorner.Parent = MainFrame
+
+local MainBorder = Instance.new("UIStroke")
+MainBorder.Color = Colors.Border
+MainBorder.Transparency = 0.85
+MainBorder.Thickness = 1.5
+MainBorder.Parent = MainFrame
+
+-- Sidebar Kiri
+local Sidebar = Instance.new("Frame")
+Sidebar.Size = UDim2.new(0, 100, 1, 0) 
+Sidebar.BackgroundColor3 = Colors.GlassPanel
+Sidebar.BackgroundTransparency = 0.3
+Sidebar.BorderSizePixel = 0
+Sidebar.Parent = MainFrame
+
+local SidebarCorner = Instance.new("UICorner")
+SidebarCorner.CornerRadius = UDim.new(0, 12)
+SidebarCorner.Parent = Sidebar
+
+local SidebarBorder = Instance.new("UIStroke")
+SidebarBorder.Color = Colors.Border
+SidebarBorder.Transparency = 0.9
+SidebarBorder.Thickness = 1
+SidebarBorder.Parent = Sidebar
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -50, 1, 0)
-Title.Position = UDim2.new(0, 15, 0, 0)
+Title.Size = UDim2.new(1, -10, 0, 35)
+Title.Position = UDim2.new(0, 5, 0, 5)
 Title.BackgroundTransparency = 1
-Title.Text = "V-Ziir0 Hub | Monitor"
-Title.TextColor3 = Colors.Text
+Title.Text = "V-Ziir0"
+Title.TextColor3 = Colors.Accent
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
-Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.Parent = TopBar
+Title.TextXAlignment = Enum.TextXAlignment.Center
+Title.Parent = Sidebar
+
+local MenuLayout = Instance.new("UIListLayout")
+MenuLayout.Padding = UDim.new(0, 4)
+MenuLayout.Parent = Sidebar
+MenuLayout.SortOrder = Enum.SortOrder.LayoutOrder
+MenuLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local function CreateSidebarButton(name, layoutOrder)
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(1, -10, 0, 30)
+    Btn.BackgroundColor3 = Colors.GlassPanel
+    Btn.BackgroundTransparency = 0.8
+    Btn.Text = ""
+    Btn.Parent = Sidebar
+    Btn.LayoutOrder = layoutOrder
+    
+    local BtnCorner = Instance.new("UICorner")
+    BtnCorner.CornerRadius = UDim.new(0, 6)
+    BtnCorner.Parent = Btn
+
+    local Txt = Instance.new("TextLabel")
+    Txt.Size = UDim2.new(1, -10, 1, 0)
+    Txt.Position = UDim2.new(0, 10, 0, 0)
+    Txt.BackgroundTransparency = 1
+    Txt.Text = name
+    Txt.TextColor3 = Colors.TextDim
+    Txt.Font = Enum.Font.GothamMedium
+    Txt.TextSize = 11
+    Txt.TextXAlignment = Enum.TextXAlignment.Left
+    Txt.Parent = Btn
+    
+    Btn.MouseEnter:Connect(function()
+        if Txt.TextColor3 ~= Colors.Accent then
+            TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.5, BackgroundColor3 = Colors.GlassPanel}):Play()
+            TweenService:Create(Txt, TweenInfo.new(0.2), {TextColor3 = Colors.Text}):Play()
+        end
+    end)
+    Btn.MouseLeave:Connect(function()
+        if Txt.TextColor3 ~= Colors.Accent then
+            TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.8}):Play()
+            TweenService:Create(Txt, TweenInfo.new(0.2), {TextColor3 = Colors.TextDim}):Play()
+        end
+    end)
+    
+    local function SetActive(isActive)
+        if isActive then
+            TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.3, BackgroundColor3 = Colors.Accent}):Play()
+            Txt.TextColor3 = Colors.Background
+        else
+            TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.8, BackgroundColor3 = Colors.GlassPanel}):Play()
+            Txt.TextColor3 = Colors.TextDim
+        end
+    end
+    
+    return Btn, SetActive
+end
+
+local HomeBtn, SetHomeActive = CreateSidebarButton("Home", 1)
+local AutoBuyBtn, SetAutoBuyActive = CreateSidebarButton("Auto Buy", 2)
+
+-- TopBar
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, -100, 0, 30)
+TopBar.Position = UDim2.new(0, 100, 0, 0)
+TopBar.BackgroundTransparency = 1
+TopBar.Parent = MainFrame
 
 local CloseBtn = Instance.new("TextButton")
-CloseBtn.Size = UDim2.new(0, 30, 0, 30)
-CloseBtn.Position = UDim2.new(1, -35, 0, 5)
+CloseBtn.Size = UDim2.new(0, 25, 0, 25)
+CloseBtn.Position = UDim2.new(1, -30, 0, 3)
 CloseBtn.BackgroundTransparency = 1
 CloseBtn.Text = "✖"
 CloseBtn.TextColor3 = Colors.TextDim
 CloseBtn.Font = Enum.Font.GothamBold
-CloseBtn.TextSize = 14
+CloseBtn.TextSize = 12
 CloseBtn.Parent = TopBar
 CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
 
--- ⭐ TOMBOL MINIMIZE
 local MinBtn = Instance.new("TextButton")
-MinBtn.Size = UDim2.new(0, 30, 0, 30)
-MinBtn.Position = UDim2.new(1, -65, 0, 5) -- Posisinya di sebelah kiri tombol Close
+MinBtn.Size = UDim2.new(0, 25, 0, 25)
+MinBtn.Position = UDim2.new(1, -55, 0, 3) 
 MinBtn.BackgroundTransparency = 1
-MinBtn.Text = "—" -- Simbol minus
+MinBtn.Text = "—" 
 MinBtn.TextColor3 = Colors.TextDim
 MinBtn.Font = Enum.Font.GothamBold
-MinBtn.TextSize = 18
+MinBtn.TextSize = 14
 MinBtn.Parent = TopBar
 
+-- Area Konten
+local ContentArea = Instance.new("Frame")
+ContentArea.Size = UDim2.new(1, -110, 1, -40)
+ContentArea.Position = UDim2.new(0, 105, 0, 35)
+ContentArea.BackgroundColor3 = Colors.GlassPanel
+ContentArea.BackgroundTransparency = 0.3
+ContentArea.BorderSizePixel = 0
+ContentArea.Parent = MainFrame
 
-local ContentFrame = Instance.new("ScrollingFrame")
-ContentFrame.Size = UDim2.new(1, -20, 1, -110) 
-ContentFrame.Position = UDim2.new(0, 10, 0, 50)
-ContentFrame.BackgroundTransparency = 1
-ContentFrame.ScrollBarThickness = 5
-ContentFrame.CanvasSize = UDim2.new(0, 0, 0, 1000) 
-ContentFrame.Parent = MainFrame
+local ContentCorner = Instance.new("UICorner")
+ContentCorner.CornerRadius = UDim.new(0, 10)
+ContentCorner.Parent = ContentArea
 
-local ContentLayout = Instance.new("UIListLayout")
-ContentLayout.Padding = UDim.new(0, 8)
-ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-ContentLayout.Parent = ContentFrame
+local ContentBorder = Instance.new("UIStroke")
+ContentBorder.Color = Colors.Border
+ContentBorder.Transparency = 0.9
+ContentBorder.Thickness = 1
+ContentBorder.Parent = ContentArea
 
--- ⭐ TOMBOL TARGET MONITOR (SMART AUTO BUY)
-for i, cfg in ipairs(CONFIG_DB) do
-    local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(1, 0, 0, 35)
-    Btn.BackgroundColor3 = Colors.Secondary
-    Btn.LayoutOrder = i
-    Btn.Text = cfg.name
-    Btn.TextColor3 = Colors.Text
-    Btn.Font = Enum.Font.GothamBold
-    Btn.TextSize = 14
-    Btn.Parent = ContentFrame
-    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
-    
-    Btn.MouseButton1Click:Connect(function()
-        targetIncome = cfg.amount
-        activeProfileName = cfg.name
-        is_farm_stopped = false
-        is_monitoring = true
-        
-        if cfg.pickaxeId then
-            targetPickaxeName = cfg.pickaxeName
-            targetPickaxeId = cfg.pickaxeId
-            targetBuyPrice = cfg.pickaxePrice
-            autoBuyEnabled = true
-            buyStatus = "Siap beli (ID: "..cfg.pickaxeId..")"
-            showNotif("🎯 TARGET & AUTO BUY", "Monitor: " .. cfg.name .. "\nTarget Kapak: " .. cfg.pickaxeName, 5)
+-- FUNGSI SWITCH TOGGLE
+local function CreateSwitchToggle(parent, name, layoutOrder, defaultState, callback)
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.new(1, 0, 0, 35)
+    Frame.BackgroundTransparency = 1
+    Frame.LayoutOrder = layoutOrder
+    Frame.Parent = parent
+
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -50, 1, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = name
+    Label.TextColor3 = Colors.Text
+    Label.Font = Enum.Font.GothamMedium
+    Label.TextSize = 12
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Frame
+
+    local SwitchBg = Instance.new("Frame")
+    SwitchBg.Size = UDim2.new(0, 36, 0, 18)
+    SwitchBg.Position = UDim2.new(1, -36, 0.5, -9)
+    SwitchBg.BackgroundColor3 = defaultState and Colors.Accent or Colors.SwitchOff
+    SwitchBg.Parent = Frame
+    Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
+
+    local Knob = Instance.new("Frame")
+    Knob.Size = UDim2.new(0, 14, 0, 14)
+    Knob.AnchorPoint = Vector2.new(0, 0) 
+    Knob.Position = defaultState and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
+    Knob.BackgroundColor3 = Colors.Text
+    Knob.Parent = SwitchBg
+    Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
+
+    local isOn = defaultState
+
+    local function updateVisual(state)
+        isOn = state
+        if isOn then
+            TweenService:Create(SwitchBg, TweenInfo.new(0.2), {BackgroundColor3 = Colors.Accent}):Play()
+            TweenService:Create(Knob, TweenInfo.new(0.2), {Position = UDim2.new(1, -16, 0.5, -7)}):Play() 
         else
-            showNotif("🎯 TARGET DIPILIH", "Target: " .. cfg.name, 5)
+            TweenService:Create(SwitchBg, TweenInfo.new(0.2), {BackgroundColor3 = Colors.SwitchOff}):Play()
+            TweenService:Create(Knob, TweenInfo.new(0.2), {Position = UDim2.new(0, 2, 0.5, -7)}):Play()
+        end
+    end
+
+    SwitchBg.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if not isOn then
+                updateVisual(true)
+                if callback then callback(true) end
+            else
+                updateVisual(false)
+                if callback then callback(false) end
+            end
         end
     end)
+
+    return {
+        SetState = function(state) updateVisual(state) end,
+        GetState = function() return isOn end
+    }
 end
 
-local Divider = Instance.new("Frame")
-Divider.Size = UDim2.new(1, 0, 0, 1)
-Divider.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-Divider.LayoutOrder = 10
-Divider.Parent = ContentFrame
+-- ⭐ TAB 1: HOME
+local HomeTab = Instance.new("ScrollingFrame")
+HomeTab.Size = UDim2.new(1, -10, 1, -10)
+HomeTab.Position = UDim2.new(0, 5, 0, 5)
+HomeTab.BackgroundTransparency = 1
+HomeTab.ScrollBarThickness = 2
+HomeTab.Parent = ContentArea
+HomeTab.Visible = true
 
-local AutoBuyLabel = Instance.new("TextLabel")
-AutoBuyLabel.Size = UDim2.new(1, 0, 0, 25)
-AutoBuyLabel.BackgroundTransparency = 1
-AutoBuyLabel.Text = "🛒 AUTO BUY PICKAXE"
-AutoBuyLabel.TextColor3 = Colors.Text
-AutoBuyLabel.Font = Enum.Font.GothamBold
-AutoBuyLabel.TextSize = 14
-AutoBuyLabel.TextXAlignment = Enum.TextXAlignment.Left
-AutoBuyLabel.LayoutOrder = 11
-AutoBuyLabel.Parent = ContentFrame
+local HomeLayout = Instance.new("UIListLayout")
+HomeLayout.Padding = UDim.new(0, 6)
+HomeLayout.Parent = HomeTab
 
--- ⭐ UI TOMBOL AUTO JUMP MANUAL
-local JumpBtn = Instance.new("TextButton")
-JumpBtn.Size = UDim2.new(1, 0, 0, 35)
-JumpBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50) -- Warna agak beda biar kerasa
-JumpBtn.LayoutOrder = 11.5 -- Biar posisinya di bawah monitor, di atas dropdown
-JumpBtn.Text = "🦘 Auto Jump: OFF"
-JumpBtn.TextColor3 = Colors.TextDim
-JumpBtn.Font = Enum.Font.GothamBold
-JumpBtn.TextSize = 14
-JumpBtn.Parent = ContentFrame
-Instance.new("UICorner", JumpBtn).CornerRadius = UDim.new(0, 6)
+local HomeTitle = Instance.new("TextLabel")
+HomeTitle.Size = UDim2.new(1, 0, 0, 20)
+HomeTitle.BackgroundTransparency = 1
+HomeTitle.Text = "Target Monitor & Auto Jump"
+HomeTitle.TextColor3 = Colors.Text
+HomeTitle.Font = Enum.Font.GothamBold
+HomeTitle.TextSize = 12
+HomeTitle.TextXAlignment = Enum.TextXAlignment.Left
+HomeTitle.Parent = HomeTab
 
-JumpBtn.MouseButton1Click:Connect(function()
-    isAutoJumpEnabled = not isAutoJumpEnabled
-    if isAutoJumpEnabled then
-        JumpBtn.Text = "🦘 Auto Jump: ON"
-        JumpBtn.TextColor3 = Color3.fromRGB(0, 255, 0) -- Hijau
-    else
-        JumpBtn.Text = "🦘 Auto Jump: OFF"
-        JumpBtn.TextColor3 = Colors.TextDim
-    end
+-- Bikin Toggle Monitor
+local monitorToggles = {}
+for i, cfg in ipairs(CONFIG_DB) do
+    local toggleObj 
+
+    toggleObj = CreateSwitchToggle(HomeTab, cfg.name, i, false, function(state)
+        if state then
+            for _, other in pairs(monitorToggles) do
+                if other ~= toggleObj then other.SetState(false) end
+            end
+            
+            targetIncome = cfg.amount
+            targetSpeedValue = cfg.targetSpeed
+            is_speed_done = false
+            is_income_done = false
+            is_buying_pickaxe = false
+            activeProfileName = cfg.name
+            is_farm_stopped = false
+            is_monitoring = true
+            
+            if cfg.pickaxeId then
+                targetPickaxeName = cfg.pickaxeName
+                targetPickaxeId = cfg.pickaxeId
+                targetBuyPrice = cfg.pickaxePrice
+                autoBuyEnabled = true
+                buyStatus = "Siap beli (ID: "..cfg.pickaxeId..")"
+                showNotif("🎯 TARGET & AUTO BUY", "Monitor: " .. cfg.name .. "\nTarget Kapak: " .. cfg.pickaxeName, 5)
+            else
+                showNotif("🎯 TARGET DIPILIH", "Target: " .. cfg.name, 5)
+            end
+        else
+            is_monitoring = false
+            is_farm_stopped = false
+            activeProfileName = "None"
+        end
+    end)
+    
+    table.insert(monitorToggles, toggleObj)
+end
+
+-- Toggle Auto Jump
+CreateSwitchToggle(HomeTab, "Auto Jump (Anti Stuck)", 10, false, function(state)
+    isAutoJumpEnabled = state
 end)
 
--- ⭐ UI AUTO BUY (DROPDOWN)
+-- Status Label di Home
+local StatusLbl = Instance.new("TextLabel")
+StatusLbl.Size = UDim2.new(1, 0, 0, 15)
+StatusLbl.Position = UDim2.new(0, 0, 1, -30)
+StatusLbl.BackgroundTransparency = 1
+StatusLbl.Text = "Status: Pilih target monitor."
+StatusLbl.TextColor3 = Colors.TextDim
+StatusLbl.Font = Enum.Font.Gotham
+StatusLbl.TextSize = 10
+StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+StatusLbl.Parent = MainFrame
+
+local BuyStatusLbl = Instance.new("TextLabel")
+BuyStatusLbl.Size = UDim2.new(1, 0, 0, 15)
+BuyStatusLbl.Position = UDim2.new(0, 0, 1, -15)
+BuyStatusLbl.BackgroundTransparency = 1
+BuyStatusLbl.Text = "Status: Idle"
+BuyStatusLbl.TextColor3 = Colors.TextDim
+BuyStatusLbl.Font = Enum.Font.GothamBold
+BuyStatusLbl.TextSize = 10
+BuyStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+BuyStatusLbl.Parent = MainFrame
+
+-- ⭐ TAB 2: AUTO BUY
+local AutoBuyTab = Instance.new("ScrollingFrame")
+AutoBuyTab.Size = UDim2.new(1, -10, 1, -10)
+AutoBuyTab.Position = UDim2.new(0, 5, 0, 5)
+AutoBuyTab.BackgroundTransparency = 1
+AutoBuyTab.ScrollBarThickness = 2
+AutoBuyTab.Parent = ContentArea
+AutoBuyTab.Visible = false
+
+local AutoBuyLayout = Instance.new("UIListLayout")
+AutoBuyLayout.Padding = UDim.new(0, 6)
+AutoBuyLayout.Parent = AutoBuyTab
+
 local DropdownBtn = Instance.new("TextButton")
-DropdownBtn.Size = UDim2.new(1, 0, 0, 40)
-DropdownBtn.BackgroundColor3 = Colors.Secondary
-DropdownBtn.LayoutOrder = 12
-DropdownBtn.Text = "▼ Pilih Kapak untuk di Auto Buy"
+DropdownBtn.Size = UDim2.new(1, 0, 0, 30)
+DropdownBtn.BackgroundColor3 = Colors.GlassPanel
+DropdownBtn.BackgroundTransparency = 0.5
+DropdownBtn.LayoutOrder = 2
+DropdownBtn.Text = "▼ Pilih Kapak"
 DropdownBtn.TextColor3 = Colors.Text
 DropdownBtn.Font = Enum.Font.GothamBold
-DropdownBtn.TextSize = 14
-DropdownBtn.Parent = ContentFrame
+DropdownBtn.TextSize = 12
+DropdownBtn.Parent = AutoBuyTab
 Instance.new("UICorner", DropdownBtn).CornerRadius = UDim.new(0, 6)
 
 local DropdownList = Instance.new("Frame")
 DropdownList.Size = UDim2.new(1, 0, 0, 0) 
 DropdownList.BackgroundTransparency = 1
-DropdownList.LayoutOrder = 13
+DropdownList.LayoutOrder = 3
 DropdownList.ClipsDescendants = true
-DropdownList.Parent = ContentFrame
+DropdownList.Parent = AutoBuyTab
 
 local ListLayout = Instance.new("UIListLayout")
-ListLayout.Padding = UDim.new(0, 4)
+ListLayout.Padding = UDim.new(0, 2)
 ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ListLayout.Parent = DropdownList
 
@@ -486,13 +678,14 @@ local isDropdownOpen = false
 
 for i, pk in ipairs(PICKAXE_DB) do
     local OptionBtn = Instance.new("TextButton")
-    OptionBtn.Size = UDim2.new(1, -10, 0, 30)
-    OptionBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    OptionBtn.Size = UDim2.new(1, -5, 0, 25)
+    OptionBtn.BackgroundColor3 = Colors.GlassPanel
+    OptionBtn.BackgroundTransparency = 0.7
     OptionBtn.LayoutOrder = i
     OptionBtn.Text = pk.name .. " (" .. pk.priceStr .. ")"
     OptionBtn.TextColor3 = Colors.Text
     OptionBtn.Font = Enum.Font.Gotham
-    OptionBtn.TextSize = 12
+    OptionBtn.TextSize = 10
     OptionBtn.Parent = DropdownList
     Instance.new("UICorner", OptionBtn).CornerRadius = UDim.new(0, 4)
     
@@ -505,7 +698,7 @@ for i, pk in ipairs(PICKAXE_DB) do
         
         DropdownList.Size = UDim2.new(1, 0, 0, 0)
         isDropdownOpen = false
-        DropdownBtn.Text = "▼ Pilih Kapak untuk di Auto Buy"
+        DropdownBtn.Text = "▼ Pilih Kapak"
         
         showNotif("🛒 AUTO BUY AKTIF", "Menunggu uang cukup untuk " .. pk.name, 5)
     end)
@@ -514,58 +707,49 @@ end
 DropdownBtn.MouseButton1Click:Connect(function()
     isDropdownOpen = not isDropdownOpen
     if isDropdownOpen then
-        local totalHeight = (#PICKAXE_DB * 34) 
+        local totalHeight = (#PICKAXE_DB * 27) 
         DropdownList.Size = UDim2.new(1, 0, 0, totalHeight)
-        DropdownBtn.Text = "▲ Tutup Pilihan Kapak"
+        DropdownBtn.Text = "▲ Tutup Pilihan"
     else
         DropdownList.Size = UDim2.new(1, 0, 0, 0)
-        DropdownBtn.Text = "▼ Pilih Kapak untuk di Auto Buy"
+        DropdownBtn.Text = "▼ Pilih Kapak"
     end
 end)
 
--- ⭐ STATUS DI BAGIAN BAWAH
-local StatusLbl = Instance.new("TextLabel")
-StatusLbl.Size = UDim2.new(1, -20, 0, 20)
-StatusLbl.Position = UDim2.new(0, 10, 1, -50)
-StatusLbl.BackgroundTransparency = 1
-StatusLbl.Text = "Status: Pilih target monitor."
-StatusLbl.TextColor3 = Colors.TextDim
-StatusLbl.Font = Enum.Font.Gotham
-StatusLbl.TextSize = 12
-StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
-StatusLbl.Parent = MainFrame
+-- ⭐ LOGIKA PINDAH TAB
+HomeBtn.MouseButton1Click:Connect(function() 
+    SetHomeActive(true); SetAutoBuyActive(false)
+    HomeTab.Visible = true; AutoBuyTab.Visible = false
+end)
 
-local BuyStatusLbl = Instance.new("TextLabel")
-BuyStatusLbl.Size = UDim2.new(1, -20, 0, 20)
-BuyStatusLbl.Position = UDim2.new(0, 10, 1, -25)
-BuyStatusLbl.BackgroundTransparency = 1
-BuyStatusLbl.Text = "Status: Idle"
-BuyStatusLbl.TextColor3 = Colors.TextDim
-BuyStatusLbl.Font = Enum.Font.GothamBold
-BuyStatusLbl.TextSize = 12
-BuyStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
-BuyStatusLbl.Parent = MainFrame
+AutoBuyBtn.MouseButton1Click:Connect(function() 
+    SetHomeActive(false); SetAutoBuyActive(true)
+    HomeTab.Visible = false; AutoBuyTab.Visible = true
+end)
 
--- ⭐ LOGIKA BUKA/TUTUP (MINIMIZE)
+SetHomeActive(true)
+
+-- ⭐ LOGIKA MINIMIZE
 local isMinimized = false
 MinBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     if isMinimized then
-        -- Sembunyikan semua isi dan kecilkan ukuran frame
-        ContentFrame.Visible = false
+        Sidebar.Visible = false
+        ContentArea.Visible = false
         StatusLbl.Visible = false
         BuyStatusLbl.Visible = false
-        MainFrame.Size = UDim2.new(0, 350, 0, 40) -- Tinggalin TopBar aja
-        MinBtn.Text = "▢" -- Ganti ikon jadi kotak (tanda buka)
+        MainFrame.Size = UDim2.new(0, 400, 0, 30)
+        MinBtn.Text = "▢"
     else
-        -- Tampilkan lagi isinya dan besarkan frame
-        ContentFrame.Visible = true
+        Sidebar.Visible = true
+        ContentArea.Visible = true
         StatusLbl.Visible = true
         BuyStatusLbl.Visible = true
-        MainFrame.Size = UDim2.new(0, 350, 0, 500) -- Balikin ke ukuran semula
-        MinBtn.Text = "—" -- Balikin ikon jadi minus
+        MainFrame.Size = UDim2.new(0, 400, 0, 320)
+        MinBtn.Text = "—"
     end
 end)
+
 -- ═══════════════════════════════════════════════════════
 -- LOOP UTAMA
 -- ═══════════════════════════════════════════════════════
@@ -582,13 +766,45 @@ task.spawn(function()
             StatusLbl.Text = "Status: Pilih target monitor di atas."
         end
         
-        if is_monitoring and not is_farm_stopped and (money_num >= targetIncome) then
-            onTargetReached()
-            sendToDiscord(money_str, speed_str, "+ AUTO FARM STOPPED (" .. tostring(activeProfileName) .. ")")
+                -- ⭐ LOGIKA AUTO RE-FARM & TARGET SPEED (FIXED)
+        if is_monitoring then
+            local speed_num = parseNumber(speed_str)
+            
+            -- 1. Cek Income (HANYA kalau nggak lagi ngejar duit buat beli kapak)
+            if not is_buying_pickaxe and not is_income_done and (money_num >= targetIncome) then
+                is_income_done = true 
+                onTargetReached()
+                sendToDiscord(money_str, speed_str, "+ AUTO FARM STOPPED (" .. tostring(activeProfileName) .. ")")
+                is_speed_done = false 
+            end
+
+            -- 2. Cek Speed (pas lagi treadmill)
+            if is_farm_stopped and not is_speed_done and targetSpeedValue > 0 then
+                if speed_num >= targetSpeedValue then
+                    is_speed_done = true
+                    print("⚡ Speed target tercapai! Cek apakah kapak udah dibeli...")
+                    
+                    if autoBuyEnabled then
+                        local currentCash = getRealCash()
+                        if currentCash < targetBuyPrice then
+                            print("💰 Uang belum cukup buat kapak! Auto Farm nyala lagi...")
+                            is_farm_stopped = false 
+                            is_income_done = true 
+                            is_buying_pickaxe = true 
+                            
+                            -- ⭐ NYALAIN AUTO FARM LAGI
+                            startAutoFarm() 
+                            
+                            showNotif("🔄 AUTO RE-FARM", "Speed tercapai, tapi uang belum cukup. Lanjut farming!", 5)
+                        end
+                    end
+                end
+            end
         end
 
+        
+
         if money_str ~= lastMoney or speed_str ~= lastSpeed then
-            -- ⭐ COOLDOWN WEBHOOK 15 DETIK (Anti Rate Limit)
             if (os.time() - lastWebhookTime) >= 15 then
                 local status = is_farm_stopped and "✅ TARGET TERCAPAI" or "🟢 FARMING ACTIVE"
                 sendToDiscord(money_str, speed_str, status)
@@ -597,29 +813,16 @@ task.spawn(function()
             end
         end
 
-                -- ⭐ LOGIKA AUTO JUMP (TREADMILL STUCK)
-        -- Jalan HANYA kalau Auto Farm udah mati & lagi monitoring
-                -- ⭐ LOGIKA AUTO JUMP (TREADMILL STUCK)
-        -- 1. Tombol manual ON, ATAU
-        -- 2. Auto Farm sudah mati (target tercapai)
         if (isAutoJumpEnabled) or (is_farm_stopped) then
-            -- Cek apakah kita lagi dalam mode monitor ATAU manual
             local isAllowedToJump = false
-            
             if isAutoJumpEnabled then
-                -- Kalau manual ON, boleh loncat kapan aja
                 isAllowedToJump = true
             elseif is_farm_stopped then
-                -- Kalau mode monitor, hanya boleh loncat kalau sedang monitoring
-                if is_monitoring then
-                    isAllowedToJump = true
-                end
+                if is_monitoring then isAllowedToJump = true end
             end
 
             if isAllowedToJump then
                 local currentSpeedNum = parseNumber(speed_str) 
-                
-                -- 1. Deteksi apakah speed pernah naik
                 if currentSpeedNum > lastSpeedCheck then
                     if not hasSpeedIncreased then
                         print("✅ Speed terdeteksi naik! Auto Jump aktif.")
@@ -628,12 +831,9 @@ task.spawn(function()
                     stuckTimer = 0
                     lastSpeedCheck = currentSpeedNum
                 else
-                    if hasSpeedIncreased then
-                        stuckTimer = stuckTimer + INTERVAL
-                    end
+                    if hasSpeedIncreased then stuckTimer = stuckTimer + INTERVAL end
                 end
 
-                -- 2. Kalau stuck lebih dari 6 detik, paksa loncat!
                 if hasSpeedIncreased and stuckTimer >= 6 then
                     local char = player.Character
                     local humanoid = char and char:FindFirstChild("Humanoid")
@@ -652,27 +852,20 @@ task.spawn(function()
                 lastSpeedCheck = 0
             end
         else
-            -- Kalau Auto Farm masih nyala (ngejar target), jangan loncat
             stuckTimer = 0
             hasSpeedIncreased = false
             lastSpeedCheck = 0
         end
 
-        -- ⭐ LOGIKA AUTO BUY (DENGAN EFEK KEDIP)
         if autoBuyEnabled then
             tryBuyPickaxe()
             BuyStatusLbl.Text = buyStatus
-            
             if buyStatus:find("PICKAXE") then
-                -- Efek Berkedip (Ganti warna antara Kuning Terang dan Kuning Redup)
                 local tick = math.floor(tick() * 2) % 2 
-                if tick == 0 then
-                    BuyStatusLbl.TextColor3 = Color3.fromRGB(255, 255, 0) -- Kuning Terang
-                else
-                    BuyStatusLbl.TextColor3 = Color3.fromRGB(200, 150, 0) -- Kuning Redup
-                end
+                if tick == 0 then BuyStatusLbl.TextColor3 = Color3.fromRGB(255, 255, 0) 
+                else BuyStatusLbl.TextColor3 = Color3.fromRGB(200, 150, 0) end
             elseif buyStatus:find("MEMBELI") then
-                BuyStatusLbl.TextColor3 = Color3.fromRGB(0, 255, 0) -- Hijau
+                BuyStatusLbl.TextColor3 = Color3.fromRGB(0, 255, 0) 
             else
                 BuyStatusLbl.TextColor3 = Colors.Text
             end
