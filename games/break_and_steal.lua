@@ -45,13 +45,40 @@ local targetPickaxeId = 7
 local targetBuyPrice = 2000 * 1e15 
 local buyStatus = "None"
 local hasCheckedOwnership = false
+local hasCheckedTarget = false 
+-- ⭐ STATE PREREQUISITE
+local prereqName = "Galaxy"
+local prereqId = 17
+local prereqPrice = 4 * 1e15
 
 -- ⭐ DATABASE CONFIG
 local CONFIG_DB = {
-    { name = "Max Account (Income 2T)", amount = 2e12, targetSpeed = 1e12, pickaxeId = 20, pickaxeName = "Enchanted", pickaxePrice = 200 * 1e15 },
-    { name = "Akun Income 1T", amount = 1e12, targetSpeed = 500e9, pickaxeId = 18, pickaxeName = "Celestial", pickaxePrice = 20 * 1e15 }
+    { 
+        name = "Max Account (Income 2T)", 
+        amount = 2e12, 
+        targetSpeed = 1e12, 
+        -- Target Utama
+        pickaxeId = 20, 
+        pickaxeName = "Enchanted", 
+        pickaxePrice = 200 * 1e15,
+        -- ⭐ TARGET ANTARA (Wajib beli dulu)
+        prereqId = 17, 
+        prereqName = "Galaxy", 
+        prereqPrice = 4 * 1e15 
+    },
+    { 
+        name = "Akun Income 1T", 
+        amount = 1e12, 
+        targetSpeed = 500e9, 
+        pickaxeId = 18, 
+        pickaxeName = "Celestial", 
+        pickaxePrice = 20 * 1e15,
+        -- ⭐ TARGET ANTARA (Wajib beli dulu)
+        prereqId = 17, 
+        prereqName = "Galaxy", 
+        prereqPrice = 4 * 1e15 
+    }
 }
-
 -- ⭐ DATABASE PICKAXE
 local PICKAXE_DB = {
     { name = "Stone", id = 2, priceStr = "$80", priceRaw = 80 },
@@ -340,24 +367,56 @@ end
 local function tryBuyPickaxe()
     if not autoBuyEnabled then return end
     
+    local currentMoney = getRealCash()
+    local money_str = formatNumber(currentMoney)
+
+    -- ⭐ TAHAP 1: CEK & BELI PREREQUISITE (GALAXY) - Cek SEKALI AJA
     if not hasCheckedOwnership then
-        hasCheckedOwnership = true
-        if checkOwnershipSilent(targetPickaxeName, targetPickaxeId) then
-            autoBuyEnabled = false
-            buyStatus = "✅ " .. string.upper(targetPickaxeName) .. " SUDAH DIMILIKI!"
-            return
+        local hasGalaxy = checkOwnershipSilent(prereqName, prereqId)
+        
+        if not hasGalaxy then
+            if currentMoney >= prereqPrice then
+                buyStatus = "⚡ MEMBELI GALAXY..."
+                local Event = ReplicatedStorage:FindFirstChild("PickaxeShopRequest")
+                if Event then
+                    Event:FireServer("Buy", prereqId)
+                    task.wait(1)
+                    Event:FireServer("Equip", prereqId)
+                    showNotif("🛒 BELI GALAXY", "Berhasil beli Galaxy! Lanjut farming target utama.", 5)
+                    -- ⭐ Reset flag, biar frame berikutnya cek ulang
+                    hasCheckedOwnership = false 
+                end
+                return
+            else
+                buyStatus = "⏳ NUNGGU UANG GALAXY: (" .. money_str .. " / " .. formatNumber(prereqPrice) .. ")"
+                return
+            end
+        else
+            -- Udah punya Galaxy, kunci flag-nya
+            hasCheckedOwnership = true
+            buyStatus = "✅ Galaxy punya! Lanjut farming target utama..."
         end
     end
 
-    local currentMoney = getRealCash()
-    local money_str = formatNumber(currentMoney)
-    
+    -- ⭐ TAHAP 2: CEK & BELI TARGET UTAMA (ENCHANTED / CELESTIAL) - Cek SEKALI AJA
+    if not hasCheckedTarget then
+        if checkOwnershipSilent(targetPickaxeName, targetPickaxeId) then
+            autoBuyEnabled = false
+            buyStatus = "✅ " .. string.upper(targetPickaxeName) .. " SUDAH DIMILIKI!"
+            hasCheckedTarget = true
+            return
+        end
+        -- Kalau belum punya, kunci flag target (biar nggak nembak Equip terus)
+        hasCheckedTarget = true
+    end
+
+    -- ⭐ TAHAP 3: NUNGGU UANG & BELI TARGET UTAMA
     if currentMoney < targetBuyPrice then
-        buyStatus = "⏳ MENUNGGU UANG: (" .. money_str .. " / " .. formatNumber(targetBuyPrice) .. ")"
+        buyStatus = "⏳ NUNGGU UANG " .. targetPickaxeName .. ": (" .. money_str .. " / " .. formatNumber(targetBuyPrice) .. ")"
         return
     end
     
-    buyStatus = "⚡ MEMBELI KAPAK..."
+    buyStatus = "⚡ MEMBELI " .. string.upper(targetPickaxeName) .. "..."
     local ok, err = pcall(function()
         local Event = ReplicatedStorage:FindFirstChild("PickaxeShopRequest")
         if Event then
@@ -373,6 +432,7 @@ local function tryBuyPickaxe()
         buyStatus = "✅ Beli Sukses!"
         autoBuyEnabled = false 
         hasCheckedOwnership = false
+        hasCheckedTarget = false  -- ⭐ Reset
         
         if is_monitoring then
             is_farm_stopped = true 
@@ -680,14 +740,20 @@ for i, cfg in ipairs(CONFIG_DB) do
             is_monitoring = true
             
             hasCheckedOwnership = false
+            hasCheckedTarget = false 
+            
+            -- ⭐ SET PREREQUISITE
+            prereqName = cfg.prereqName or "Galaxy"
+            prereqId = cfg.prereqId or 17
+            prereqPrice = cfg.prereqPrice or 4e15
             
             if cfg.pickaxeId then
                 targetPickaxeName = cfg.pickaxeName
                 targetPickaxeId = cfg.pickaxeId
                 targetBuyPrice = cfg.pickaxePrice
                 autoBuyEnabled = true
-                buyStatus = "Siap beli (ID: "..cfg.pickaxeId..")"
-                showNotif("🎯 TARGET & AUTO BUY", "Monitor: " .. cfg.name .. "\nTarget Kapak: " .. cfg.pickaxeName, 5)
+                buyStatus = "Siap beli Galaxy dulu (ID: "..prereqId..")"
+                showNotif("🎯 TARGET & AUTO BUY", "Monitor: " .. cfg.name .. "\nTarget: Galaxy dulu → " .. cfg.pickaxeName, 5)
             else
                 showNotif("🎯 TARGET DIPILIH", "Target: " .. cfg.name, 5)
             end
