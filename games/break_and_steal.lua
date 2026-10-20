@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (Glassmorphism v83 - Toggle Logo)
+-- ✨ V-Ziir0 Hub: Break & Steal (Glassmorphism v90 - ULTIMATE)
 -- ═══════════════════════════════════════════════════════
 
 local player = game.Players.LocalPlayer
@@ -38,11 +38,12 @@ local targetPickaxeName = "Kapak Ajaib"
 local targetPickaxeId = 7 
 local targetBuyPrice = 2000 * 1e15 
 local buyStatus = "None"
+local hasCheckedOwnership = false
 
 -- ⭐ DATABASE CONFIG
 local CONFIG_DB = {
-    { name = "Max Account (Income 2T)", amount = 2e12, targetSpeed = 1e12, pickaxeId = 20, pickaxeName = "Enchanted ($200Qa)", pickaxePrice = 200 * 1e15 },
-    { name = "Akun Income 1T", amount = 1e12, targetSpeed = 500e9, pickaxeId = 18, pickaxeName = "Celestial ($20Qa)", pickaxePrice = 20 * 1e15 }
+    { name = "Max Account (Income 2T)", amount = 2e12, targetSpeed = 1e12, pickaxeId = 20, pickaxeName = "Enchanted", pickaxePrice = 200 * 1e15 },
+    { name = "Akun Income 1T", amount = 1e12, targetSpeed = 500e9, pickaxeId = 18, pickaxeName = "Celestial", pickaxePrice = 20 * 1e15 }
 }
 
 -- ⭐ DATABASE PICKAXE
@@ -71,6 +72,51 @@ local PICKAXE_DB = {
 -- FUNGSI PENDUKUNG
 local function showNotif(title, text, duration)
     pcall(function() StarterGui:SetCore("SendNotification", { Title = title, Text = text, Duration = duration or 5 }) end)
+end
+
+-- ⭐ FUNGSI CEK KEPEMILIKAN SILENT (FINAL)
+local function checkOwnershipSilent(targetName, targetId)
+    local char = player.Character
+    if not char then return false end
+
+    local currentlyHeld = char:FindFirstChildWhichIsA("Tool")
+    local heldName = currentlyHeld and currentlyHeld.Name or nil
+    
+    local Event = ReplicatedStorage:FindFirstChild("PickaxeShopRequest")
+    if not Event then return false end
+    
+    Event:FireServer("Equip", targetId)
+    task.wait(0.5)
+    
+    local hasTarget = false
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") then
+            local tooltip = ""
+            local success, res = pcall(function() return tool.ToolTip end)
+            if success and res then tooltip = string.lower(res) end
+            
+            if string.find(string.lower(tool.Name), string.lower(targetName)) or string.find(tooltip, string.lower(targetName)) then
+                hasTarget = true
+                break
+            end
+        end
+    end
+    
+    -- Balikin kapak semula kalau gagal
+    if not hasTarget and heldName then
+        local oldId = nil
+        for _, pk in ipairs(PICKAXE_DB) do
+            if string.find(string.lower(pk.name), string.lower(heldName)) then
+                oldId = pk.id
+                break
+            end
+        end
+        if oldId then
+            Event:FireServer("Equip", oldId)
+        end
+    end
+    
+    return hasTarget
 end
 
 local function sendWebhook(payload)
@@ -172,6 +218,250 @@ local function getRealCash()
     return 0
 end
 
+-- ═══════════════════════════════════════════════════════
+-- ✨ V-Ziir0 Hub: Break & Steal (Glassmorphism v92 - Webhook Update)
+-- ═══════════════════════════════════════════════════════
+
+local player = game.Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
+local StarterGui = game:GetService("StarterGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1560789097440616529/097v0ksImZfYm2g4zSQKbEvb-9ttIwSHah-v5nxavKklco3t5S71rMR9vySSjOwtMEEn"
+local INTERVAL = 2 
+local httpFn = request or http_request or (http and http.request)
+
+if not httpFn then warn("❌ Nggak ada fungsi request!"); return end
+
+-- ⭐ STATE GLOBAL (Sama kayak sebelumnya)
+local is_monitoring = false
+local targetIncome = 0
+local targetSpeedValue = 0
+local is_speed_done = false 
+local is_income_done = false 
+local is_buying_pickaxe = false 
+local activeProfileName = "None"
+local is_farm_stopped = false
+local lastMoney, lastSpeed = nil, nil
+local lastWebhookTime = 0 
+local lastSpeedCheck = 0
+local stuckTimer = 0
+local hasSpeedIncreased = false
+local isAutoJumpEnabled = false
+
+-- ⭐ STATE AUTO BUY
+local autoBuyEnabled = false
+local targetPickaxeName = "Kapak Ajaib" 
+local targetPickaxeId = 7 
+local targetBuyPrice = 2000 * 1e15 
+local buyStatus = "None"
+local hasCheckedOwnership = false
+
+-- ⭐ DATABASE CONFIG
+local CONFIG_DB = {
+    { name = "Max Account (Income 2T)", amount = 2e12, targetSpeed = 1e12, pickaxeId = 20, pickaxeName = "Enchanted", pickaxePrice = 200 * 1e15 },
+    { name = "Akun Income 1T", amount = 1e12, targetSpeed = 500e9, pickaxeId = 18, pickaxeName = "Celestial", pickaxePrice = 20 * 1e15 }
+}
+
+-- ⭐ DATABASE PICKAXE
+local PICKAXE_DB = {
+    { name = "Stone", id = 2, priceStr = "$80", priceRaw = 80 },
+    { name = "Iron", id = 3, priceStr = "$800", priceRaw = 800 },
+    { name = "Golden", id = 4, priceStr = "$20K", priceRaw = 20 * 1e3 },
+    { name = "Diamond", id = 5, priceStr = "$160K", priceRaw = 160 * 1e3 },
+    { name = "Strawberry", id = 6, priceStr = "$1.2M", priceRaw = 1.2 * 1e6 },
+    { name = "Cactus", id = 7, priceStr = "$6M", priceRaw = 6 * 1e6 },
+    { name = "Lightning", id = 8, priceStr = "$40M", priceRaw = 40 * 1e6 },
+    { name = "Candy", id = 9, priceStr = "$400M", priceRaw = 400 * 1e6 },
+    { name = "Rainbow", id = 10, priceStr = "$2.8B", priceRaw = 2.8 * 1e9 },
+    { name = "Crystal", id = 11, priceStr = "$20B", priceRaw = 20 * 1e9 },
+    { name = "Demon", id = 12, priceStr = "$120B", priceRaw = 120 * 1e9 },
+    { name = "Hacker", id = 13, priceStr = "$1.2T", priceRaw = 1.2 * 1e12 },
+    { name = "UFO", id = 14, priceStr = "$12T", priceRaw = 12 * 1e12 },
+    { name = "Secret", id = 15, priceStr = "$80T", priceRaw = 80 * 1e12 },
+    { name = "Cool", id = 16, priceStr = "$600T", priceRaw = 600 * 1e12 },
+    { name = "Galaxy", id = 17, priceStr = "$4Qa", priceRaw = 4 * 1e15 },
+    { name = "Celestial", id = 18, priceStr = "$20Qa", priceRaw = 20 * 1e15 }, 
+    { name = "Sci Fi", id = 19, priceStr = "$75Qa", priceRaw = 75 * 1e15 },
+    { name = "Enchanted", id = 20, priceStr = "$200Qa", priceRaw = 200 * 1e15 },
+}
+
+-- FUNGSI PENDUKUNG
+local function showNotif(title, text, duration)
+    pcall(function() StarterGui:SetCore("SendNotification", { Title = title, Text = text, Duration = duration or 5 }) end)
+end
+
+-- ⭐ FUNGSI BARU: CEK KAPAK YANG LAGI DIPEgang
+local function getEquippedPickaxe()
+    local char = player.Character
+    if not char then return "None" end
+    
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") then
+            -- Coba ambil ToolTip dulu (biasanya lebih akurat)
+            local tooltip = ""
+            local success, res = pcall(function() return tool.ToolTip end)
+            if success and res and res ~= "" then
+                return res -- Contoh: "Enchanted Pickaxe"
+            end
+            
+            -- Kalau ToolTip kosong, pakai Name
+            if tool.Name ~= "" then
+                return tool.Name
+            end
+        end
+    end
+    
+    return "None"
+end
+
+-- ⭐ FUNGSI DETEKSI SILENT (V9.1)
+local function checkOwnershipSilent(targetName, targetId)
+    local char = player.Character
+    if not char then return false end
+
+    local currentlyHeld = char:FindFirstChildWhichIsA("Tool")
+    local heldName = currentlyHeld and currentlyHeld.Name or nil
+    
+    local Event = ReplicatedStorage:FindFirstChild("PickaxeShopRequest")
+    if not Event then return false end
+    
+    Event:FireServer("Equip", targetId)
+    task.wait(0.5) 
+    
+    local hasTarget = false
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") then
+            local tooltip = ""
+            local success, res = pcall(function() return tool.ToolTip end)
+            if success and res then tooltip = string.lower(res) end
+            
+            if string.find(string.lower(tool.Name), string.lower(targetName)) or string.find(tooltip, string.lower(targetName)) then
+                hasTarget = true
+                break
+            end
+        end
+    end
+    
+    if not hasTarget and heldName then
+        local oldId = nil
+        for _, pk in ipairs(PICKAXE_DB) do
+            if string.find(string.lower(pk.name), string.lower(heldName)) then
+                oldId = pk.id
+                break
+            end
+        end
+        if oldId then
+            Event:FireServer("Equip", oldId)
+        end
+    end
+    
+    return hasTarget
+end
+
+local function sendWebhook(payload)
+    local body = HttpService:JSONEncode(payload)
+    for attempt = 1, 3 do
+        local ok, result = pcall(function() return httpFn({ Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = body }) end)
+        if ok then
+            local status = nil
+            if type(result) == "table" then status = result.Status or result.StatusCode end
+            if status == 200 or status == 204 then return true end
+        end
+        task.wait(1)
+    end
+    return false
+end
+
+local function formatNumber(num)
+    local n = tonumber(num)
+    if not n then return tostring(num) end
+    local suffixes = {"", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"}
+    local i = 1
+    while n >= 1000 and i < #suffixes do n = n / 1000; i = i + 1 end
+    if n % 1 == 0 then return string.format("%d%s", n, suffixes[i]) else return string.format("%.1f%s", n, suffixes[i]) end
+end
+
+local function cleanNumber(str)
+    if not str then return "0" end
+    str = tostring(str):gsub("[^%d%a%.%,]", ""):gsub("[sS]$", "")
+    return str ~= "" and str or "0"
+end
+
+local function parseNumber(str)
+    local s = tostring(str):upper():gsub("[$S/]", ""):gsub("%s", ""):gsub(",", ".")
+    local mult = 1
+    if s:find("K") then mult = 1e3; s = s:gsub("K","")
+    elseif s:find("M") then mult = 1e6; s = s:gsub("M","")
+    elseif s:find("B") then mult = 1e9; s = s:gsub("B","")
+    elseif s:find("T") then mult = 1e12; s = s:gsub("T","")
+    elseif s:find("QA") then mult = 1e15; s = s:gsub("QA","")
+    end
+    return (tonumber(s) or 0) * mult
+end
+
+local function getMyData()
+    local money, speed = "0", "0"
+    local ls = player:FindFirstChild("leaderstats")
+    if ls then
+        for _, stat in ipairs(ls:GetChildren()) do
+            local n = stat.Name:lower()
+            if n:find("money") or n:find("cash") or n:find("income") then money = formatNumber(cleanNumber(stat.Value))
+            elseif n:find("speed") or n:find("kecepatan") then speed = formatNumber(cleanNumber(stat.Value)) end
+        end
+        if money ~= "0" and speed ~= "0" then return money, speed end
+    end
+    local pg = player:FindFirstChild("PlayerGui")
+    if pg then
+        for _, gui in ipairs(pg:GetChildren()) do
+            if gui:IsA("ScreenGui") then
+                for _, frame in ipairs(gui:GetDescendants()) do
+                    if frame:IsA("Frame") and (frame.Name:lower():find("leader") or frame.Name:lower():find("board") or frame.Name:lower():find("player")) then
+                        local texts = {}
+                        for _, txt in ipairs(frame:GetDescendants()) do
+                            if (txt:IsA("TextLabel") or txt:IsA("TextBox")) and txt.Text ~= "" then table.insert(texts, txt.Text) end
+                        end
+                        for i, t in ipairs(texts) do
+                            local lowerT = t:lower()
+                            if lowerT:find("money") or lowerT:find("income") or lowerT:find("uang") then
+                                local num = t:match("([%d%.%,]+[KMBTQa]?)")
+                                if num then money = formatNumber(cleanNumber(num)) else money = formatNumber(cleanNumber(texts[i+1] or "0")) end
+                            end
+                            if lowerT:find("speed") or lowerT:find("kecepatan") then
+                                local num = t:match("([%d%.%,]+[KMBTQa]?)")
+                                if num then speed = formatNumber(cleanNumber(num)) else speed = formatNumber(cleanNumber(texts[i+1] or "0")) end
+                            end
+                        end
+                        if money ~= "0" and speed ~= "0" then return money, speed end
+                    end
+                end
+            end
+        end
+    end
+    return money, speed
+end
+
+local function getRealCash()
+    local pg = player:FindFirstChild("PlayerGui")
+    if not pg then return 0 end
+    local mainGui = pg:FindFirstChild("MainGUI")
+    if not mainGui then return 0 end
+    local currencies = mainGui:FindFirstChild("Currencies")
+    if not currencies then return 0 end
+    local cashObj = currencies:FindFirstChild("Cash")
+    if not cashObj then return 0 end
+    local amountText = cashObj:FindFirstChild("Amount")
+    if not amountText or not amountText:IsA("TextLabel") then return 0 end
+    local rawText = amountText.Text
+    local numberPart = rawText:match("%$(.*)")
+    if numberPart then return parseNumber(numberPart:gsub("%s", "")) end
+    return 0
+end
+
+-- ⭐ FUNGSI DISCORD YANG UDAH DIUPDATE
 local function sendToDiscord(money, speed, status_text)
     local pickaxeInfo = "None"
     local pickaxeProgress = "-"
@@ -181,6 +471,9 @@ local function sendToDiscord(money, speed, status_text)
         pickaxeProgress = formatNumber(currentCash) .. " / " .. formatNumber(targetBuyPrice)
     end
 
+    -- Ambil info kapak yang lagi dipegang
+    local equippedInfo = getEquippedPickaxe()
+
     local embed = {
         title = "🔒 BREAK & STEAL MONITOR 🔒",
         description = "```ini\n[ @" .. player.Name .. " ]```\n**━━━━━━━━━━━━━━━━━━━━━━━━**",
@@ -189,8 +482,12 @@ local function sendToDiscord(money, speed, status_text)
             { name = "💰 ▸ INCOME", value = "```yaml\n" .. tostring(money) .. "```", inline = true },
             { name = "⚡ ▸ SPEED", value = "```yaml\n" .. tostring(speed) .. "```", inline = true },
             { name = "🎯 ▸ PROFILE", value = "```yaml\n" .. tostring(activeProfileName or "None") .. "```", inline = true },
-            { name = "🛒 ▸ TARGET PICKAXE", value = "```yaml\n" .. tostring(pickaxeInfo) .. "```", inline = true },
-            { name = "⏳ ▸ PROGRESS BUY", value = "```yaml\n" .. tostring(pickaxeProgress) .. "```", inline = true },
+            
+            -- FIELD BARU: KAPAK YANG LAGI DIPAKAI
+            { name = "⚔️ ▸ EQUIPPED", value = "```yaml\n" .. tostring(equippedInfo) .. "```", inline = true },
+            
+            { name = "🛒 ▸ TARGET", value = "```yaml\n" .. tostring(pickaxeInfo) .. "```", inline = true },
+            { name = "⏳ ▸ PROGRESS", value = "```yaml\n" .. tostring(pickaxeProgress) .. "```", inline = true },
             { name = " ", value = " ", inline = true },
             { name = "📌 ▸ STATUS", value = "```diff\n" .. (status_text or "+ FARMING ACTIVE") .. "```", inline = false },
         },
@@ -263,15 +560,25 @@ end
 
 local function tryBuyPickaxe()
     if not autoBuyEnabled then return end
+    
+    if not hasCheckedOwnership then
+        hasCheckedOwnership = true
+        if checkOwnershipSilent(targetPickaxeName, targetPickaxeId) then
+            autoBuyEnabled = false
+            buyStatus = "✅ " .. string.upper(targetPickaxeName) .. " SUDAH DIMILIKI!"
+            return
+        end
+    end
+
     local currentMoney = getRealCash()
     local money_str = formatNumber(currentMoney)
     
     if currentMoney < targetBuyPrice then
-        buyStatus = "⏳ PICKAXE " .. string.upper(targetPickaxeName) .. ": (" .. money_str .. " / " .. formatNumber(targetBuyPrice) .. ")"
+        buyStatus = "⏳ MENUNGGU UANG: (" .. money_str .. " / " .. formatNumber(targetBuyPrice) .. ")"
         return
     end
     
-    buyStatus = "⚡ MEMBELI..."
+    buyStatus = "⚡ MEMBELI KAPAK..."
     local ok, err = pcall(function()
         local Event = ReplicatedStorage:FindFirstChild("PickaxeShopRequest")
         if Event then
@@ -286,6 +593,7 @@ local function tryBuyPickaxe()
         showNotif("🛒 AUTO BUY BERHASIL", "Kamu telah membeli " .. targetPickaxeName .. "!", 5)
         buyStatus = "✅ Beli Sukses!"
         autoBuyEnabled = false 
+        hasCheckedOwnership = false
         
         if is_monitoring then
             is_farm_stopped = true 
@@ -299,15 +607,19 @@ local function tryBuyPickaxe()
             local Event = ReplicatedStorage:FindFirstChild("PickaxeShopRequest")
             if Event then Event:FireServer("Equip", targetPickaxeId) end
         end)
+        
+        -- Kirim webhook update setelah beli & equip
+        task.wait(1)
+        local money_str_new, speed_str_new = getMyData()
+        sendToDiscord(money_str_new, speed_str_new, "+ AUTO BUY SUCCESS (" .. targetPickaxeName .. ")")
     else
         print("❌ Gagal nembak event: " .. tostring(err))
         buyStatus = "❌ Gagal beli."
         autoBuyEnabled = false
     end
 end
-
 -- ═══════════════════════════════════════════════════════
--- ⭐ UI CUSTOM (GLASSMORPHISM v83)
+-- ⭐ UI CUSTOM (GLASSMORPHISM v90)
 -- ═══════════════════════════════════════════════════════
 local Colors = {
     Background = Color3.fromRGB(20, 20, 25),     
@@ -319,11 +631,10 @@ local Colors = {
     SwitchOff = Color3.fromRGB(60, 60, 70),
 }
 
--- ⭐ PERBAIKAN UTAMA: DisplayOrder
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "VZiir0HubGlass"
 ScreenGui.ResetOnSpawn = false
-ScreenGui.DisplayOrder = 999 -- ⭐ PAKSA UI SELALU DI PALING ATAS
+ScreenGui.DisplayOrder = 999 
 ScreenGui.Parent = CoreGui
 
 -- MAIN FRAME
@@ -590,6 +901,8 @@ for i, cfg in ipairs(CONFIG_DB) do
             is_farm_stopped = false
             is_monitoring = true
             
+            hasCheckedOwnership = false
+            
             if cfg.pickaxeId then
                 targetPickaxeName = cfg.pickaxeName
                 targetPickaxeId = cfg.pickaxeId
@@ -695,6 +1008,7 @@ for i, pk in ipairs(PICKAXE_DB) do
         targetPickaxeId = pk.id
         targetBuyPrice = pk.priceRaw
         autoBuyEnabled = true
+        hasCheckedOwnership = false
         buyStatus = "Siap beli (ID: "..pk.id..")"
         
         DropdownList.Size = UDim2.new(1, 0, 0, 0)
@@ -730,28 +1044,28 @@ end)
 
 SetHomeActive(true)
 
--- ⭐ -- ⭐ TOMBOL FLOATING (LOGO) - DIBUAT PALING BAWAH
+-- ⭐ TOMBOL FLOATING (LOGO)
 local FloatingBtn = Instance.new("ImageButton")
 FloatingBtn.Size = UDim2.new(0, 50, 0, 50)
 FloatingBtn.Position = UDim2.new(0, 20, 0, 20) 
 FloatingBtn.BackgroundTransparency = 0
 FloatingBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-FloatingBtn.Image = "rbxassetid://71161700474373"
+FloatingBtn.Image = "rbxassetid://71161700474373" 
 FloatingBtn.Visible = true 
 FloatingBtn.ZIndex = 100 
 FloatingBtn.Parent = ScreenGui
 Instance.new("UICorner", FloatingBtn).CornerRadius = UDim.new(1, 0)
 
--- ⭐ SISTEM DRAG & KLIK YANG BENER (ANTI BENTROK) ⭐
+-- Sistem Drag & Klik
 local draggingFloating = false
 local dragStartPos = nil
 local startPos = nil
-local isDragging = false -- Flag untuk ngecek apakah user beneran nge-drag
+local isDragging = false 
 
 FloatingBtn.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         draggingFloating = true
-        isDragging = false -- Reset flag drag
+        isDragging = false
         dragStartPos = input.Position
         startPos = FloatingBtn.Position
         
@@ -766,7 +1080,6 @@ end)
 UserInputService.InputChanged:Connect(function(input)
     if draggingFloating and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         local delta = input.Position - dragStartPos
-        -- Cek kalau pergerakannya lebih dari 5 pixel, anggap ini drag
         if delta.Magnitude > 5 then
             isDragging = true
         end
@@ -778,12 +1091,9 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- FUNGSI KLIK LOGO UNTUK TOGGLE BUKA/TUTUP UI
 FloatingBtn.MouseButton1Click:Connect(function()
-    -- Kalau tadi beneran nge-drag (geser), jangan buka/tutup UI
     if isDragging then return end
     
-    -- Logic Toggle: Kalau UI lagi kebuka, tutup. Kalau ketutup, buka.
     if MainFrame.Visible then
         MainFrame.Visible = false
     else
@@ -792,11 +1102,10 @@ FloatingBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- LOGIKA MINIMIZE (Tombol strip)
+-- LOGIKA MINIMIZE
 local isMinimized = false
 MinBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = false
-    -- Logo biarkan tetap terlihat
 end)
 
 -- LOOP UTAMA
@@ -813,7 +1122,7 @@ task.spawn(function()
             StatusLbl.Text = "Status: Pilih target monitor di atas."
         end
         
-        -- LOGIKA AUTO RE-FARM & TARGET SPEED (FIXED)
+        -- LOGIKA AUTO RE-FARM & TARGET SPEED
         if is_monitoring then
             local speed_num = parseNumber(speed_str)
             
@@ -900,12 +1209,14 @@ task.spawn(function()
         if autoBuyEnabled then
             tryBuyPickaxe()
             BuyStatusLbl.Text = buyStatus
-            if buyStatus:find("PICKAXE") then
+            if buyStatus:find("MENUNGGU") then
                 local tick = math.floor(tick() * 2) % 2 
                 if tick == 0 then BuyStatusLbl.TextColor3 = Color3.fromRGB(255, 255, 0) 
                 else BuyStatusLbl.TextColor3 = Color3.fromRGB(200, 150, 0) end
             elseif buyStatus:find("MEMBELI") then
                 BuyStatusLbl.TextColor3 = Color3.fromRGB(0, 255, 0) 
+            elseif buyStatus:find("DIMILIKI") then
+                BuyStatusLbl.TextColor3 = Color3.fromRGB(0, 255, 100)
             else
                 BuyStatusLbl.TextColor3 = Colors.Text
             end
