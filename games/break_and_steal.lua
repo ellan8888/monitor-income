@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (Glassmorphism v93 - AutoExec Ready)
+-- ✨ V-Ziir0 Hub: Break & Steal (Glassmorphism v95 - FINAL)
 -- ═══════════════════════════════════════════════════════
 
 local player = game.Players.LocalPlayer
@@ -37,6 +37,7 @@ local lastSpeedCheck = 0
 local stuckTimer = 0
 local hasSpeedIncreased = false
 local isAutoJumpEnabled = false
+local lastKnownPickaxe = "None" -- ⭐ Fallback Kapak
 
 -- ⭐ STATE AUTO BUY
 local autoBuyEnabled = false
@@ -57,11 +58,9 @@ local CONFIG_DB = {
         name = "Max Account (Income 2T)", 
         amount = 2e12, 
         targetSpeed = 1e12, 
-        -- Target Utama
         pickaxeId = 20, 
         pickaxeName = "Enchanted", 
         pickaxePrice = 200 * 1e15,
-        -- ⭐ TARGET ANTARA (Wajib beli dulu)
         prereqId = 17, 
         prereqName = "Galaxy", 
         prereqPrice = 4 * 1e15 
@@ -73,12 +72,12 @@ local CONFIG_DB = {
         pickaxeId = 18, 
         pickaxeName = "Celestial", 
         pickaxePrice = 20 * 1e15,
-        -- ⭐ TARGET ANTARA (Wajib beli dulu)
         prereqId = 17, 
         prereqName = "Galaxy", 
         prereqPrice = 4 * 1e15 
     }
 }
+
 -- ⭐ DATABASE PICKAXE
 local PICKAXE_DB = {
     { name = "Stone", id = 2, priceStr = "$80", priceRaw = 80 },
@@ -107,25 +106,53 @@ local function showNotif(title, text, duration)
     pcall(function() StarterGui:SetCore("SendNotification", { Title = title, Text = text, Duration = duration or 5 }) end)
 end
 
--- ⭐ FUNGSI BARU: CEK KAPAK YANG LAGI DIPEgang
-local function getEquippedPickaxe()
-    local char = player.Character
-    if not char then return "None" end
-    
-    for _, tool in ipairs(char:GetChildren()) do
-        if tool:IsA("Tool") then
+-- ⭐ FUNGSI BARU: CEK KAPAK (Scan Player + Character + Fallback)
+local function getPickaxeName()
+    -- 1. Cek Player (Backpack/Tas)
+    for _, item in ipairs(player:GetDescendants()) do
+        if item:IsA("Tool") then
+            local toolName = string.lower(item.Name)
             local tooltip = ""
-            local success, res = pcall(function() return tool.ToolTip end)
-            if success and res and res ~= "" then
-                return res
+            local success, res = pcall(function() return item.ToolTip end)
+            if success and res then tooltip = string.lower(res) end
+            
+            if string.find(toolName, "pickaxe") or string.find(tooltip, "pickaxe") then
+                if res and res ~= "" then
+                    lastKnownPickaxe = res
+                    return res
+                else
+                    lastKnownPickaxe = item.Name
+                    return item.Name
+                end
             end
-            if tool.Name ~= "" then
-                return tool.Name
+        end
+    end
+
+    -- 2. Cek Character (Kapak dipegang)
+    local char = player.Character
+    if char then
+        for _, item in ipairs(char:GetChildren()) do
+            if item:IsA("Tool") then
+                local toolName = string.lower(item.Name)
+                local tooltip = ""
+                local success, res = pcall(function() return item.ToolTip end)
+                if success and res then tooltip = string.lower(res) end
+                
+                if string.find(toolName, "pickaxe") or string.find(tooltip, "pickaxe") then
+                    if res and res ~= "" then
+                        lastKnownPickaxe = res
+                        return res
+                    else
+                        lastKnownPickaxe = item.Name
+                        return item.Name
+                    end
+                end
             end
         end
     end
     
-    return "None"
+    -- 3. Fallback
+    return lastKnownPickaxe
 end
 
 -- ⭐ FUNGSI DETEKSI SILENT (V9.1)
@@ -281,7 +308,7 @@ local function sendToDiscord(money, speed, status_text)
         pickaxeProgress = formatNumber(currentCash) .. " / " .. formatNumber(targetBuyPrice)
     end
 
-    local equippedInfo = getEquippedPickaxe()
+    local equippedInfo = getPickaxeName() -- ⭐ Pakai fungsi baru
 
     local embed = {
         title = "🔒 BREAK & STEAL MONITOR 🔒",
@@ -370,7 +397,7 @@ local function tryBuyPickaxe()
     local currentMoney = getRealCash()
     local money_str = formatNumber(currentMoney)
 
-    -- ⭐ TAHAP 1: CEK & BELI PREREQUISITE (GALAXY) - Cek SEKALI AJA
+    -- ⭐ TAHAP 1: CEK & BELI PREREQUISITE (GALAXY)
     if not hasCheckedOwnership then
         local hasGalaxy = checkOwnershipSilent(prereqName, prereqId)
         
@@ -383,7 +410,6 @@ local function tryBuyPickaxe()
                     task.wait(1)
                     Event:FireServer("Equip", prereqId)
                     showNotif("🛒 BELI GALAXY", "Berhasil beli Galaxy! Lanjut farming target utama.", 5)
-                    -- ⭐ Reset flag, biar frame berikutnya cek ulang
                     hasCheckedOwnership = false 
                 end
                 return
@@ -392,13 +418,12 @@ local function tryBuyPickaxe()
                 return
             end
         else
-            -- Udah punya Galaxy, kunci flag-nya
             hasCheckedOwnership = true
             buyStatus = "✅ Galaxy punya! Lanjut farming target utama..."
         end
     end
 
-    -- ⭐ TAHAP 2: CEK & BELI TARGET UTAMA (ENCHANTED / CELESTIAL) - Cek SEKALI AJA
+    -- ⭐ TAHAP 2: CEK TARGET UTAMA (ENCHANTED/CELESTIAL)
     if not hasCheckedTarget then
         if checkOwnershipSilent(targetPickaxeName, targetPickaxeId) then
             autoBuyEnabled = false
@@ -406,11 +431,10 @@ local function tryBuyPickaxe()
             hasCheckedTarget = true
             return
         end
-        -- Kalau belum punya, kunci flag target (biar nggak nembak Equip terus)
         hasCheckedTarget = true
     end
 
-    -- ⭐ TAHAP 3: NUNGGU UANG & BELI TARGET UTAMA
+    -- ⭐ TAHAP 3: BELI TARGET UTAMA
     if currentMoney < targetBuyPrice then
         buyStatus = "⏳ NUNGGU UANG " .. targetPickaxeName .. ": (" .. money_str .. " / " .. formatNumber(targetBuyPrice) .. ")"
         return
@@ -432,7 +456,7 @@ local function tryBuyPickaxe()
         buyStatus = "✅ Beli Sukses!"
         autoBuyEnabled = false 
         hasCheckedOwnership = false
-        hasCheckedTarget = false  -- ⭐ Reset
+        hasCheckedTarget = false
         
         if is_monitoring then
             is_farm_stopped = true 
@@ -457,7 +481,7 @@ local function tryBuyPickaxe()
     end
 end
 -- ═══════════════════════════════════════════════════════
--- ⭐ UI CUSTOM (GLASSMORPHISM v93)
+-- ⭐ UI CUSTOM (GLASSMORPHISM v95)
 -- ═══════════════════════════════════════════════════════
 local Colors = {
     Background = Color3.fromRGB(20, 20, 25),     
@@ -475,7 +499,6 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.DisplayOrder = 999 
 ScreenGui.Parent = CoreGui
 
--- MAIN FRAME
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, 400, 0, 320) 
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -497,7 +520,6 @@ MainBorder.Transparency = 0.85
 MainBorder.Thickness = 1.5
 MainBorder.Parent = MainFrame
 
--- Sidebar Kiri
 local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.new(0, 100, 1, 0) 
 Sidebar.BackgroundColor3 = Colors.GlassPanel
@@ -585,7 +607,6 @@ end
 local HomeBtn, SetHomeActive = CreateSidebarButton("Home", 1)
 local AutoBuyBtn, SetAutoBuyActive = CreateSidebarButton("Auto Buy", 2)
 
--- TopBar
 local TopBar = Instance.new("Frame")
 TopBar.Size = UDim2.new(1, -100, 0, 30)
 TopBar.Position = UDim2.new(0, 100, 0, 0)
@@ -613,7 +634,6 @@ MinBtn.Font = Enum.Font.GothamBold
 MinBtn.TextSize = 14
 MinBtn.Parent = TopBar
 
--- Area Konten
 local ContentArea = Instance.new("Frame")
 ContentArea.Size = UDim2.new(1, -110, 1, -40)
 ContentArea.Position = UDim2.new(0, 105, 0, 35)
@@ -632,7 +652,6 @@ ContentBorder.Transparency = 0.9
 ContentBorder.Thickness = 1
 ContentBorder.Parent = ContentArea
 
--- FUNGSI SWITCH TOGGLE
 local function CreateSwitchToggle(parent, name, layoutOrder, defaultState, callback)
     local Frame = Instance.new("Frame")
     Frame.Size = UDim2.new(1, 0, 0, 35)
@@ -696,7 +715,6 @@ local function CreateSwitchToggle(parent, name, layoutOrder, defaultState, callb
     }
 end
 
--- TAB 1: HOME
 local HomeTab = Instance.new("ScrollingFrame")
 HomeTab.Size = UDim2.new(1, -10, 1, -10)
 HomeTab.Position = UDim2.new(0, 5, 0, 5)
@@ -719,7 +737,6 @@ HomeTitle.TextSize = 12
 HomeTitle.TextXAlignment = Enum.TextXAlignment.Left
 HomeTitle.Parent = HomeTab
 
--- Bikin Toggle Monitor
 local monitorToggles = {}
 for i, cfg in ipairs(CONFIG_DB) do
     local toggleObj 
@@ -742,7 +759,6 @@ for i, cfg in ipairs(CONFIG_DB) do
             hasCheckedOwnership = false
             hasCheckedTarget = false 
             
-            -- ⭐ SET PREREQUISITE
             prereqName = cfg.prereqName or "Galaxy"
             prereqId = cfg.prereqId or 17
             prereqPrice = cfg.prereqPrice or 4e15
@@ -767,12 +783,10 @@ for i, cfg in ipairs(CONFIG_DB) do
     table.insert(monitorToggles, toggleObj)
 end
 
--- Toggle Auto Jump
 CreateSwitchToggle(HomeTab, "Auto Jump (Anti Stuck)", 10, false, function(state)
     isAutoJumpEnabled = state
 end)
 
--- Status Label di Home
 local StatusLbl = Instance.new("TextLabel")
 StatusLbl.Size = UDim2.new(1, 0, 0, 15)
 StatusLbl.Position = UDim2.new(0, 0, 1, -30)
@@ -795,7 +809,6 @@ BuyStatusLbl.TextSize = 10
 BuyStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
 BuyStatusLbl.Parent = MainFrame
 
--- TAB 2: AUTO BUY
 local AutoBuyTab = Instance.new("ScrollingFrame")
 AutoBuyTab.Size = UDim2.new(1, -10, 1, -10)
 AutoBuyTab.Position = UDim2.new(0, 5, 0, 5)
@@ -875,7 +888,6 @@ DropdownBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- LOGIKA PINDAH TAB
 HomeBtn.MouseButton1Click:Connect(function() 
     SetHomeActive(true); SetAutoBuyActive(false)
     HomeTab.Visible = true; AutoBuyTab.Visible = false
@@ -888,7 +900,6 @@ end)
 
 SetHomeActive(true)
 
--- ⭐ TOMBOL FLOATING (LOGO)
 local FloatingBtn = Instance.new("ImageButton")
 FloatingBtn.Size = UDim2.new(0, 50, 0, 50)
 FloatingBtn.Position = UDim2.new(0, 20, 0, 20) 
@@ -900,7 +911,6 @@ FloatingBtn.ZIndex = 100
 FloatingBtn.Parent = ScreenGui
 Instance.new("UICorner", FloatingBtn).CornerRadius = UDim.new(1, 0)
 
--- Sistem Drag & Klik
 local draggingFloating = false
 local dragStartPos = nil
 local startPos = nil
@@ -946,13 +956,11 @@ FloatingBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- LOGIKA MINIMIZE
 local isMinimized = false
 MinBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = false
 end)
 
--- LOOP UTAMA
 task.spawn(function()
     print("✅ Monitor Break & Steal berjalan!")
 
@@ -966,7 +974,6 @@ task.spawn(function()
             StatusLbl.Text = "Status: Pilih target monitor di atas."
         end
         
-        -- LOGIKA AUTO RE-FARM & TARGET SPEED
         if is_monitoring then
             local speed_num = parseNumber(speed_str)
             
@@ -1071,7 +1078,6 @@ task.spawn(function()
     end
 end)
 
--- ⭐ AUTO REEXECUTE (FIXED)
 local function autoReExecute()
     local url = "https://raw.githubusercontent.com/ellan8888/monitor-income/refs/heads/main/monitor.lua"
     local scriptToRun = "loadstring(game:HttpGet('" .. url .. "'))()"
@@ -1093,5 +1099,4 @@ local function autoReExecute()
     end
 end
 
--- Panggil fungsi ini sekali saat script pertama kali jalan
 autoReExecute()
