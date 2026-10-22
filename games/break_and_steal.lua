@@ -52,6 +52,39 @@ local prereqName = "Galaxy"
 local prereqId = 17
 local prereqPrice = 4 * 1e15
 
+-- ⭐ FUNGSI SAVE/LOAD STATE (Pake _G biar awet)
+local STATE_KEY = "VZiir0_SavedProfile"
+
+local function saveState(profileName)
+    _G[STATE_KEY] = profileName
+    if writefile then
+        pcall(function() writefile("vziir0_state.txt", profileName) end)
+    end
+    print("💾 [State] Profil disimpan: " .. tostring(profileName))
+end
+
+local function loadState()
+    -- 1. Cek _G dulu
+    if _G[STATE_KEY] and _G[STATE_KEY] ~= "" and _G[STATE_KEY] ~= "None" then
+        return _G[STATE_KEY]
+    end
+    -- 2. Cek file (kalau executor support)
+    if readfile and isfile and isfile("vziir0_state.txt") then
+        local ok, content = pcall(function() return readfile("vziir0_state.txt") end)
+        if ok and content and content ~= "" then
+            return content
+        end
+    end
+    return nil
+end
+
+local function clearState()
+    _G[STATE_KEY] = nil
+    if writefile then
+        pcall(function() writefile("vziir0_state.txt", "") end)
+    end
+    print("🗑️ [State] Profil dihapus.")
+end
 -- ⭐ DATABASE CONFIG
 local CONFIG_DB = {
     { 
@@ -652,7 +685,9 @@ ContentBorder.Transparency = 0.9
 ContentBorder.Thickness = 1
 ContentBorder.Parent = ContentArea
 
-local function CreateSwitchToggle(parent, name, layoutOrder, defaultState, callback)
+-- [Bagian atas sama kayak sebelumnya, cuma ganti CreateSwitchToggle aja]
+
+local function CreateSwitchToggle(parent, name, layoutOrder, defaultState)
     local Frame = Instance.new("Frame")
     Frame.Size = UDim2.new(1, 0, 0, 35)
     Frame.BackgroundTransparency = 1
@@ -697,23 +732,14 @@ local function CreateSwitchToggle(parent, name, layoutOrder, defaultState, callb
         end
     end
 
-    SwitchBg.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            if not isOn then
-                updateVisual(true)
-                if callback then callback(true) end
-            else
-                updateVisual(false)
-                if callback then callback(false) end
-            end
-        end
-    end)
-
     return {
         SetState = function(state) updateVisual(state) end,
-        GetState = function() return isOn end
+        GetState = function() return isOn end,
+        SwitchBg = SwitchBg,
     }
 end
+
+-- [Sisanya sama kayak script kamu, termasuk loop for i, cfg in ipairs(CONFIG_DB) do]
 
 local HomeTab = Instance.new("ScrollingFrame")
 HomeTab.Size = UDim2.new(1, -10, 1, -10)
@@ -738,13 +764,19 @@ HomeTitle.TextXAlignment = Enum.TextXAlignment.Left
 HomeTitle.Parent = HomeTab
 
 local monitorToggles = {}
-for i, cfg in ipairs(CONFIG_DB) do
-    local toggleObj 
+local toggleCallbacks = {}
 
-    toggleObj = CreateSwitchToggle(HomeTab, cfg.name, i, false, function(state)
+for i, cfg in ipairs(CONFIG_DB) do
+    -- ⭐ 1. Bikin toggle visual dulu
+    local toggleObj = CreateSwitchToggle(HomeTab, cfg.name, i, false)
+    
+    -- ⭐ 2. Bikin callback
+    local function callbackFn(state)
         if state then
             for _, other in pairs(monitorToggles) do
-                if other ~= toggleObj then other.SetState(false) end
+                if other ~= toggleObj and other.SetState then 
+                    other.SetState(false) 
+                end
             end
             
             targetIncome = cfg.amount
@@ -773,18 +805,42 @@ for i, cfg in ipairs(CONFIG_DB) do
             else
                 showNotif("🎯 TARGET DIPILIH", "Target: " .. cfg.name, 5)
             end
+            
+            saveState(cfg.name)
         else
             is_monitoring = false
             is_farm_stopped = false
             activeProfileName = "None"
+            clearState()
+        end
+    end
+    
+    -- ⭐ 3. Simpen callback
+    toggleCallbacks[i] = callbackFn
+    table.insert(monitorToggles, toggleObj)
+    
+    -- ⭐ 4. "Tempel" callback ke SwitchBg
+    local switchBg = toggleObj.SwitchBg
+    switchBg.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if toggleObj.GetState() then
+                toggleObj.SetState(false)
+                callbackFn(false)
+            else
+                toggleObj.SetState(true)
+                callbackFn(true)
+            end
         end
     end)
-    
-    table.insert(monitorToggles, toggleObj)
 end
 
-CreateSwitchToggle(HomeTab, "Auto Jump (Anti Stuck)", 10, false, function(state)
-    isAutoJumpEnabled = state
+local autoJumpToggle = CreateSwitchToggle(HomeTab, "Auto Jump (Anti Stuck)", 10, false)
+autoJumpToggle.SwitchBg.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        local newState = not autoJumpToggle.GetState()
+        autoJumpToggle.SetState(newState)
+        isAutoJumpEnabled = newState
+    end
 end)
 
 local StatusLbl = Instance.new("TextLabel")
@@ -1098,5 +1154,27 @@ local function autoReExecute()
         warn("⚠️ Executor kamu nggak support queue_on_teleport. Pakai folder autoexec aja.")
     end
 end
+
+-- ⭐ AUTO-LOAD STATE PAS SCRIPT JALAN
+task.spawn(function()
+    task.wait(3) -- Tunggu UI dan monitor siap
+    local savedProfile = loadState()
+    if savedProfile and savedProfile ~= "None" then
+        print("🔄 [Auto-Load] Restoring profile: " .. savedProfile)
+        -- Cari toggle yang namanya cocok, terus nyalain
+        for i, cfg in ipairs(CONFIG_DB) do
+            if cfg.name == savedProfile and monitorToggles[i] then
+                -- Trigger toggle secara programatik
+                monitorToggles[i].SetState(true)
+                -- Karena SetState cuma update visual, kita perlu panggil callback-nya manual
+                -- Panggil callback dengan state=true
+                if toggleCallbacks[i] then
+                    toggleCallbacks[i](true)
+                end
+                break
+            end
+        end
+    end
+end)
 
 autoReExecute()
