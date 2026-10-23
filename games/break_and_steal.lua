@@ -1,6 +1,19 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (Glassmorphism v95 - FINAL)
+-- ✨ V-Ziir0 Hub: Break & Steal (Glassmorphism v29 - Anti Double)
 -- ═══════════════════════════════════════════════════════
+
+-- ⭐ SISTEM ANTI-DOUBLE EXECUTE
+if _G.BreakSteal_Hub_Active then
+    pcall(function()
+        if _G.BreakSteal_Hub_UI then _G.BreakSteal_Hub_UI:Destroy() end
+        if _G.BreakSteal_LoopBroken then _G.BreakSteal_LoopBroken = true end
+    end)
+    print("♻️ [Anti-Double] Menghapus script Break & Steal yang lama...")
+    task.wait(0.5)
+end
+_G.BreakSteal_Hub_Active = true
+_G.BreakSteal_Hub_UI = nil
+_G.BreakSteal_LoopBroken = false
 
 local player = game.Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
@@ -10,7 +23,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
--- ⭐ PENGAMAN: Tunggu karakter beneran ada (biar gak error pas autoexec)
+-- ⭐ PENGAMAN: Tunggu karakter beneran ada
 if not player.Character then
     player.CharacterAdded:Wait()
     task.wait(2)
@@ -37,7 +50,7 @@ local lastSpeedCheck = 0
 local stuckTimer = 0
 local hasSpeedIncreased = false
 local isAutoJumpEnabled = false
-local lastKnownPickaxe = "None" -- ⭐ Fallback Kapak
+local lastKnownPickaxe = "None"
 
 -- ⭐ STATE AUTO BUY
 local autoBuyEnabled = false
@@ -47,12 +60,11 @@ local targetBuyPrice = 2000 * 1e15
 local buyStatus = "None"
 local hasCheckedOwnership = false
 local hasCheckedTarget = false 
--- ⭐ STATE PREREQUISITE
 local prereqName = "Galaxy"
 local prereqId = 17
 local prereqPrice = 4 * 1e15
 
--- ⭐ FUNGSI SAVE/LOAD STATE (Pake _G biar awet)
+-- ⭐ FUNGSI SAVE/LOAD STATE
 local STATE_KEY = "VZiir0_SavedProfile"
 
 local function saveState(profileName)
@@ -64,16 +76,12 @@ local function saveState(profileName)
 end
 
 local function loadState()
-    -- 1. Cek _G dulu
     if _G[STATE_KEY] and _G[STATE_KEY] ~= "" and _G[STATE_KEY] ~= "None" then
         return _G[STATE_KEY]
     end
-    -- 2. Cek file (kalau executor support)
     if readfile and isfile and isfile("vziir0_state.txt") then
         local ok, content = pcall(function() return readfile("vziir0_state.txt") end)
-        if ok and content and content ~= "" then
-            return content
-        end
+        if ok and content and content ~= "" then return content end
     end
     return nil
 end
@@ -85,30 +93,11 @@ local function clearState()
     end
     print("🗑️ [State] Profil dihapus.")
 end
+
 -- ⭐ DATABASE CONFIG
 local CONFIG_DB = {
-    { 
-        name = "Max Account (Income 2T)", 
-        amount = 2e12, 
-        targetSpeed = 1e12, 
-        pickaxeId = 20, 
-        pickaxeName = "Enchanted", 
-        pickaxePrice = 200 * 1e15,
-        prereqId = 17, 
-        prereqName = "Galaxy", 
-        prereqPrice = 4 * 1e15 
-    },
-    { 
-        name = "Akun Income 1T", 
-        amount = 1e12, 
-        targetSpeed = 500e9, 
-        pickaxeId = 18, 
-        pickaxeName = "Celestial", 
-        pickaxePrice = 20 * 1e15,
-        prereqId = 17, 
-        prereqName = "Galaxy", 
-        prereqPrice = 4 * 1e15 
-    }
+    { name = "Max Account (Income 2T)", amount = 2e12, targetSpeed = 1e12, pickaxeId = 20, pickaxeName = "Enchanted", pickaxePrice = 200 * 1e15, prereqId = 17, prereqName = "Galaxy", prereqPrice = 4 * 1e15 },
+    { name = "Akun Income 1T", amount = 1e12, targetSpeed = 500e9, pickaxeId = 18, pickaxeName = "Celestial", pickaxePrice = 20 * 1e15, prereqId = 17, prereqName = "Galaxy", prereqPrice = 4 * 1e15 }
 }
 
 -- ⭐ DATABASE PICKAXE
@@ -139,9 +128,7 @@ local function showNotif(title, text, duration)
     pcall(function() StarterGui:SetCore("SendNotification", { Title = title, Text = text, Duration = duration or 5 }) end)
 end
 
--- ⭐ FUNGSI BARU: CEK KAPAK (Scan Player + Character + Fallback)
 local function getPickaxeName()
-    -- 1. Cek Player (Backpack/Tas)
     for _, item in ipairs(player:GetDescendants()) do
         if item:IsA("Tool") then
             local toolName = string.lower(item.Name)
@@ -161,7 +148,6 @@ local function getPickaxeName()
         end
     end
 
-    -- 2. Cek Character (Kapak dipegang)
     local char = player.Character
     if char then
         for _, item in ipairs(char:GetChildren()) do
@@ -183,12 +169,9 @@ local function getPickaxeName()
             end
         end
     end
-    
-    -- 3. Fallback
     return lastKnownPickaxe
 end
 
--- ⭐ FUNGSI DETEKSI SILENT (V9.1)
 local function checkOwnershipSilent(targetName, targetId)
     local char = player.Character
     if not char then return false end
@@ -224,11 +207,8 @@ local function checkOwnershipSilent(targetName, targetId)
                 break
             end
         end
-        if oldId then
-            Event:FireServer("Equip", oldId)
-        end
+        if oldId then Event:FireServer("Equip", oldId) end
     end
-    
     return hasTarget
 end
 
@@ -331,7 +311,6 @@ local function getRealCash()
     return 0
 end
 
--- ⭐ FUNGSI DISCORD YANG UDAH DIUPDATE
 local function sendToDiscord(money, speed, status_text)
     local pickaxeInfo = "None"
     local pickaxeProgress = "-"
@@ -340,8 +319,7 @@ local function sendToDiscord(money, speed, status_text)
         local currentCash = getRealCash()
         pickaxeProgress = formatNumber(currentCash) .. " / " .. formatNumber(targetBuyPrice)
     end
-
-    local equippedInfo = getPickaxeName() -- ⭐ Pakai fungsi baru
+    local equippedInfo = getPickaxeName()
 
     local embed = {
         title = "🔒 BREAK & STEAL MONITOR 🔒",
@@ -397,13 +375,9 @@ local function startAutoFarm()
         if shared.AutoFarm then shared.AutoFarm = true end
         if getgenv().AutoFarmEgg then getgenv().AutoFarmEgg = true end
     end)
-    
     local targetLabel = nil
     for _, gui in pairs(CoreGui:GetDescendants()) do
-        if gui:IsA("TextLabel") and gui.Text:lower() == "auto farm eggs" then 
-            targetLabel = gui; 
-            break 
-        end
+        if gui:IsA("TextLabel") and gui.Text:lower() == "auto farm eggs" then targetLabel = gui; break end
     end
     if targetLabel then
         local parent = targetLabel.Parent
@@ -426,14 +400,11 @@ end
 
 local function tryBuyPickaxe()
     if not autoBuyEnabled then return end
-    
     local currentMoney = getRealCash()
     local money_str = formatNumber(currentMoney)
 
-    -- ⭐ TAHAP 1: CEK & BELI PREREQUISITE (GALAXY)
     if not hasCheckedOwnership then
         local hasGalaxy = checkOwnershipSilent(prereqName, prereqId)
-        
         if not hasGalaxy then
             if currentMoney >= prereqPrice then
                 buyStatus = "⚡ MEMBELI GALAXY..."
@@ -456,7 +427,6 @@ local function tryBuyPickaxe()
         end
     end
 
-    -- ⭐ TAHAP 2: CEK TARGET UTAMA (ENCHANTED/CELESTIAL)
     if not hasCheckedTarget then
         if checkOwnershipSilent(targetPickaxeName, targetPickaxeId) then
             autoBuyEnabled = false
@@ -467,7 +437,6 @@ local function tryBuyPickaxe()
         hasCheckedTarget = true
     end
 
-    -- ⭐ TAHAP 3: BELI TARGET UTAMA
     if currentMoney < targetBuyPrice then
         buyStatus = "⏳ NUNGGU UANG " .. targetPickaxeName .. ": (" .. money_str .. " / " .. formatNumber(targetBuyPrice) .. ")"
         return
@@ -513,26 +482,20 @@ local function tryBuyPickaxe()
         autoBuyEnabled = false
     end
 end
+
 -- ═══════════════════════════════════════════════════════
--- ⭐ UI CUSTOM (GLASSMORPHISM v95)
+-- ⭐ UI CUSTOM (GLASSMORPHISM)
 -- ═══════════════════════════════════════════════════════
-local Colors = {
-    Background = Color3.fromRGB(20, 20, 25),     
-    GlassPanel = Color3.fromRGB(40, 40, 50),     
-    Border = Color3.fromRGB(255, 255, 255),      
-    Accent = Color3.fromRGB(120, 200, 255),      
-    Text = Color3.fromRGB(255, 255, 255),
-    TextDim = Color3.fromRGB(180, 180, 190),
-    SwitchOff = Color3.fromRGB(60, 60, 70),
-}
+local Colors = { Background = Color3.fromRGB(20, 20, 25), GlassPanel = Color3.fromRGB(40, 40, 50), Border = Color3.fromRGB(255, 255, 255), Accent = Color3.fromRGB(120, 200, 255), Text = Color3.fromRGB(255, 255, 255), TextDim = Color3.fromRGB(180, 180, 190), SwitchOff = Color3.fromRGB(60, 60, 70), }
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "VZiir0HubGlass"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.DisplayOrder = 999 
 ScreenGui.Parent = CoreGui
+_G.BreakSteal_Hub_UI = ScreenGui
 
-local MainFrame = Instance.new("Frame")
+local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Size = UDim2.new(0, 400, 0, 320) 
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -541,36 +504,18 @@ MainFrame.BackgroundTransparency = 0.1
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
-MainFrame.Parent = ScreenGui
-
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 12)
-MainCorner.Parent = MainFrame
-
-local MainBorder = Instance.new("UIStroke")
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
+local MainBorder = Instance.new("UIStroke", MainFrame)
 MainBorder.Color = Colors.Border
 MainBorder.Transparency = 0.85
-MainBorder.Thickness = 1.5
-MainBorder.Parent = MainFrame
 
-local Sidebar = Instance.new("Frame")
+local Sidebar = Instance.new("Frame", MainFrame)
 Sidebar.Size = UDim2.new(0, 100, 1, 0) 
 Sidebar.BackgroundColor3 = Colors.GlassPanel
 Sidebar.BackgroundTransparency = 0.3
-Sidebar.BorderSizePixel = 0
-Sidebar.Parent = MainFrame
+Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 12)
 
-local SidebarCorner = Instance.new("UICorner")
-SidebarCorner.CornerRadius = UDim.new(0, 12)
-SidebarCorner.Parent = Sidebar
-
-local SidebarBorder = Instance.new("UIStroke")
-SidebarBorder.Color = Colors.Border
-SidebarBorder.Transparency = 0.9
-SidebarBorder.Thickness = 1
-SidebarBorder.Parent = Sidebar
-
-local Title = Instance.new("TextLabel")
+local Title = Instance.new("TextLabel", Sidebar)
 Title.Size = UDim2.new(1, -10, 0, 35)
 Title.Position = UDim2.new(0, 5, 0, 5)
 Title.BackgroundTransparency = 1
@@ -578,12 +523,9 @@ Title.Text = "V-Ziir0"
 Title.TextColor3 = Colors.Accent
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
-Title.TextXAlignment = Enum.TextXAlignment.Center
-Title.Parent = Sidebar
 
-local MenuLayout = Instance.new("UIListLayout")
+local MenuLayout = Instance.new("UIListLayout", Sidebar)
 MenuLayout.Padding = UDim.new(0, 4)
-MenuLayout.Parent = Sidebar
 MenuLayout.SortOrder = Enum.SortOrder.LayoutOrder
 MenuLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
@@ -595,12 +537,8 @@ local function CreateSidebarButton(name, layoutOrder)
     Btn.Text = ""
     Btn.Parent = Sidebar
     Btn.LayoutOrder = layoutOrder
-    
-    local BtnCorner = Instance.new("UICorner")
-    BtnCorner.CornerRadius = UDim.new(0, 6)
-    BtnCorner.Parent = Btn
-
-    local Txt = Instance.new("TextLabel")
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
+    local Txt = Instance.new("TextLabel", Btn)
     Txt.Size = UDim2.new(1, -10, 1, 0)
     Txt.Position = UDim2.new(0, 10, 0, 0)
     Txt.BackgroundTransparency = 1
@@ -609,11 +547,9 @@ local function CreateSidebarButton(name, layoutOrder)
     Txt.Font = Enum.Font.GothamMedium
     Txt.TextSize = 11
     Txt.TextXAlignment = Enum.TextXAlignment.Left
-    Txt.Parent = Btn
-    
     Btn.MouseEnter:Connect(function()
         if Txt.TextColor3 ~= Colors.Accent then
-            TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.5, BackgroundColor3 = Colors.GlassPanel}):Play()
+            TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.5}):Play()
             TweenService:Create(Txt, TweenInfo.new(0.2), {TextColor3 = Colors.Text}):Play()
         end
     end)
@@ -623,7 +559,6 @@ local function CreateSidebarButton(name, layoutOrder)
             TweenService:Create(Txt, TweenInfo.new(0.2), {TextColor3 = Colors.TextDim}):Play()
         end
     end)
-    
     local function SetActive(isActive)
         if isActive then
             TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.3, BackgroundColor3 = Colors.Accent}):Play()
@@ -633,68 +568,48 @@ local function CreateSidebarButton(name, layoutOrder)
             Txt.TextColor3 = Colors.TextDim
         end
     end
-    
     return Btn, SetActive
 end
 
 local HomeBtn, SetHomeActive = CreateSidebarButton("Home", 1)
 local AutoBuyBtn, SetAutoBuyActive = CreateSidebarButton("Auto Buy", 2)
 
-local TopBar = Instance.new("Frame")
+local TopBar = Instance.new("Frame", MainFrame)
 TopBar.Size = UDim2.new(1, -100, 0, 30)
 TopBar.Position = UDim2.new(0, 100, 0, 0)
 TopBar.BackgroundTransparency = 1
-TopBar.Parent = MainFrame
 
-local CloseBtn = Instance.new("TextButton")
+local CloseBtn = Instance.new("TextButton", TopBar)
 CloseBtn.Size = UDim2.new(0, 25, 0, 25)
 CloseBtn.Position = UDim2.new(1, -30, 0, 3)
 CloseBtn.BackgroundTransparency = 1
 CloseBtn.Text = "✖"
 CloseBtn.TextColor3 = Colors.TextDim
-CloseBtn.Font = Enum.Font.GothamBold
-CloseBtn.TextSize = 12
-CloseBtn.Parent = TopBar
-CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+CloseBtn.MouseButton1Click:Connect(function() 
+    _G.BreakSteal_Hub_Active = false
+    ScreenGui:Destroy() 
+end)
 
-local MinBtn = Instance.new("TextButton")
+local MinBtn = Instance.new("TextButton", TopBar)
 MinBtn.Size = UDim2.new(0, 25, 0, 25)
 MinBtn.Position = UDim2.new(1, -55, 0, 3) 
 MinBtn.BackgroundTransparency = 1
 MinBtn.Text = "—" 
 MinBtn.TextColor3 = Colors.TextDim
-MinBtn.Font = Enum.Font.GothamBold
-MinBtn.TextSize = 14
-MinBtn.Parent = TopBar
 
-local ContentArea = Instance.new("Frame")
+local ContentArea = Instance.new("Frame", MainFrame)
 ContentArea.Size = UDim2.new(1, -110, 1, -40)
 ContentArea.Position = UDim2.new(0, 105, 0, 35)
 ContentArea.BackgroundColor3 = Colors.GlassPanel
 ContentArea.BackgroundTransparency = 0.3
-ContentArea.BorderSizePixel = 0
-ContentArea.Parent = MainFrame
-
-local ContentCorner = Instance.new("UICorner")
-ContentCorner.CornerRadius = UDim.new(0, 10)
-ContentCorner.Parent = ContentArea
-
-local ContentBorder = Instance.new("UIStroke")
-ContentBorder.Color = Colors.Border
-ContentBorder.Transparency = 0.9
-ContentBorder.Thickness = 1
-ContentBorder.Parent = ContentArea
-
--- [Bagian atas sama kayak sebelumnya, cuma ganti CreateSwitchToggle aja]
+Instance.new("UICorner", ContentArea).CornerRadius = UDim.new(0, 10)
 
 local function CreateSwitchToggle(parent, name, layoutOrder, defaultState)
-    local Frame = Instance.new("Frame")
+    local Frame = Instance.new("Frame", parent)
     Frame.Size = UDim2.new(1, 0, 0, 35)
     Frame.BackgroundTransparency = 1
     Frame.LayoutOrder = layoutOrder
-    Frame.Parent = parent
-
-    local Label = Instance.new("TextLabel")
+    local Label = Instance.new("TextLabel", Frame)
     Label.Size = UDim2.new(1, -50, 1, 0)
     Label.BackgroundTransparency = 1
     Label.Text = name
@@ -702,25 +617,17 @@ local function CreateSwitchToggle(parent, name, layoutOrder, defaultState)
     Label.Font = Enum.Font.GothamMedium
     Label.TextSize = 12
     Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Parent = Frame
-
-    local SwitchBg = Instance.new("Frame")
+    local SwitchBg = Instance.new("Frame", Frame)
     SwitchBg.Size = UDim2.new(0, 36, 0, 18)
     SwitchBg.Position = UDim2.new(1, -36, 0.5, -9)
     SwitchBg.BackgroundColor3 = defaultState and Colors.Accent or Colors.SwitchOff
-    SwitchBg.Parent = Frame
     Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
-
-    local Knob = Instance.new("Frame")
+    local Knob = Instance.new("Frame", SwitchBg)
     Knob.Size = UDim2.new(0, 14, 0, 14)
-    Knob.AnchorPoint = Vector2.new(0, 0) 
     Knob.Position = defaultState and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
     Knob.BackgroundColor3 = Colors.Text
-    Knob.Parent = SwitchBg
     Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
-
     local isOn = defaultState
-
     local function updateVisual(state)
         isOn = state
         if isOn then
@@ -731,7 +638,6 @@ local function CreateSwitchToggle(parent, name, layoutOrder, defaultState)
             TweenService:Create(Knob, TweenInfo.new(0.2), {Position = UDim2.new(0, 2, 0.5, -7)}):Play()
         end
     end
-
     return {
         SetState = function(state) updateVisual(state) end,
         GetState = function() return isOn end,
@@ -739,21 +645,15 @@ local function CreateSwitchToggle(parent, name, layoutOrder, defaultState)
     }
 end
 
--- [Sisanya sama kayak script kamu, termasuk loop for i, cfg in ipairs(CONFIG_DB) do]
-
-local HomeTab = Instance.new("ScrollingFrame")
+local HomeTab = Instance.new("ScrollingFrame", ContentArea)
 HomeTab.Size = UDim2.new(1, -10, 1, -10)
 HomeTab.Position = UDim2.new(0, 5, 0, 5)
 HomeTab.BackgroundTransparency = 1
 HomeTab.ScrollBarThickness = 2
-HomeTab.Parent = ContentArea
-HomeTab.Visible = true
-
-local HomeLayout = Instance.new("UIListLayout")
+local HomeLayout = Instance.new("UIListLayout", HomeTab)
 HomeLayout.Padding = UDim.new(0, 6)
-HomeLayout.Parent = HomeTab
 
-local HomeTitle = Instance.new("TextLabel")
+local HomeTitle = Instance.new("TextLabel", HomeTab)
 HomeTitle.Size = UDim2.new(1, 0, 0, 20)
 HomeTitle.BackgroundTransparency = 1
 HomeTitle.Text = "Target Monitor & Auto Jump"
@@ -761,24 +661,17 @@ HomeTitle.TextColor3 = Colors.Text
 HomeTitle.Font = Enum.Font.GothamBold
 HomeTitle.TextSize = 12
 HomeTitle.TextXAlignment = Enum.TextXAlignment.Left
-HomeTitle.Parent = HomeTab
 
 local monitorToggles = {}
 local toggleCallbacks = {}
 
 for i, cfg in ipairs(CONFIG_DB) do
-    -- ⭐ 1. Bikin toggle visual dulu
     local toggleObj = CreateSwitchToggle(HomeTab, cfg.name, i, false)
-    
-    -- ⭐ 2. Bikin callback
     local function callbackFn(state)
         if state then
             for _, other in pairs(monitorToggles) do
-                if other ~= toggleObj and other.SetState then 
-                    other.SetState(false) 
-                end
+                if other ~= toggleObj and other.SetState then other.SetState(false) end
             end
-            
             targetIncome = cfg.amount
             targetSpeedValue = cfg.targetSpeed
             is_speed_done = false
@@ -787,14 +680,11 @@ for i, cfg in ipairs(CONFIG_DB) do
             activeProfileName = cfg.name
             is_farm_stopped = false
             is_monitoring = true
-            
             hasCheckedOwnership = false
             hasCheckedTarget = false 
-            
             prereqName = cfg.prereqName or "Galaxy"
             prereqId = cfg.prereqId or 17
             prereqPrice = cfg.prereqPrice or 4e15
-            
             if cfg.pickaxeId then
                 targetPickaxeName = cfg.pickaxeName
                 targetPickaxeId = cfg.pickaxeId
@@ -805,7 +695,6 @@ for i, cfg in ipairs(CONFIG_DB) do
             else
                 showNotif("🎯 TARGET DIPILIH", "Target: " .. cfg.name, 5)
             end
-            
             saveState(cfg.name)
         else
             is_monitoring = false
@@ -814,12 +703,8 @@ for i, cfg in ipairs(CONFIG_DB) do
             clearState()
         end
     end
-    
-    -- ⭐ 3. Simpen callback
     toggleCallbacks[i] = callbackFn
     table.insert(monitorToggles, toggleObj)
-    
-    -- ⭐ 4. "Tempel" callback ke SwitchBg
     local switchBg = toggleObj.SwitchBg
     switchBg.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -843,18 +728,16 @@ autoJumpToggle.SwitchBg.InputBegan:Connect(function(input)
     end
 end)
 
-local StatusLbl = Instance.new("TextLabel")
+local StatusLbl = Instance.new("TextLabel", MainFrame)
 StatusLbl.Size = UDim2.new(1, 0, 0, 15)
 StatusLbl.Position = UDim2.new(0, 0, 1, -30)
 StatusLbl.BackgroundTransparency = 1
 StatusLbl.Text = "Status: Pilih target monitor."
 StatusLbl.TextColor3 = Colors.TextDim
-StatusLbl.Font = Enum.Font.Gotham
 StatusLbl.TextSize = 10
 StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
-StatusLbl.Parent = MainFrame
 
-local BuyStatusLbl = Instance.new("TextLabel")
+local BuyStatusLbl = Instance.new("TextLabel", MainFrame)
 BuyStatusLbl.Size = UDim2.new(1, 0, 0, 15)
 BuyStatusLbl.Position = UDim2.new(0, 0, 1, -15)
 BuyStatusLbl.BackgroundTransparency = 1
@@ -863,21 +746,17 @@ BuyStatusLbl.TextColor3 = Colors.TextDim
 BuyStatusLbl.Font = Enum.Font.GothamBold
 BuyStatusLbl.TextSize = 10
 BuyStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
-BuyStatusLbl.Parent = MainFrame
 
-local AutoBuyTab = Instance.new("ScrollingFrame")
+local AutoBuyTab = Instance.new("ScrollingFrame", ContentArea)
 AutoBuyTab.Size = UDim2.new(1, -10, 1, -10)
 AutoBuyTab.Position = UDim2.new(0, 5, 0, 5)
 AutoBuyTab.BackgroundTransparency = 1
 AutoBuyTab.ScrollBarThickness = 2
-AutoBuyTab.Parent = ContentArea
 AutoBuyTab.Visible = false
-
-local AutoBuyLayout = Instance.new("UIListLayout")
+local AutoBuyLayout = Instance.new("UIListLayout", AutoBuyTab)
 AutoBuyLayout.Padding = UDim.new(0, 6)
-AutoBuyLayout.Parent = AutoBuyTab
 
-local DropdownBtn = Instance.new("TextButton")
+local DropdownBtn = Instance.new("TextButton", AutoBuyTab)
 DropdownBtn.Size = UDim2.new(1, 0, 0, 30)
 DropdownBtn.BackgroundColor3 = Colors.GlassPanel
 DropdownBtn.BackgroundTransparency = 0.5
@@ -886,25 +765,19 @@ DropdownBtn.Text = "▼ Pilih Kapak"
 DropdownBtn.TextColor3 = Colors.Text
 DropdownBtn.Font = Enum.Font.GothamBold
 DropdownBtn.TextSize = 12
-DropdownBtn.Parent = AutoBuyTab
 Instance.new("UICorner", DropdownBtn).CornerRadius = UDim.new(0, 6)
 
-local DropdownList = Instance.new("Frame")
+local DropdownList = Instance.new("Frame", AutoBuyTab)
 DropdownList.Size = UDim2.new(1, 0, 0, 0) 
 DropdownList.BackgroundTransparency = 1
 DropdownList.LayoutOrder = 3
 DropdownList.ClipsDescendants = true
-DropdownList.Parent = AutoBuyTab
-
-local ListLayout = Instance.new("UIListLayout")
+local ListLayout = Instance.new("UIListLayout", DropdownList)
 ListLayout.Padding = UDim.new(0, 2)
-ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-ListLayout.Parent = DropdownList
 
 local isDropdownOpen = false
-
 for i, pk in ipairs(PICKAXE_DB) do
-    local OptionBtn = Instance.new("TextButton")
+    local OptionBtn = Instance.new("TextButton", DropdownList)
     OptionBtn.Size = UDim2.new(1, -5, 0, 25)
     OptionBtn.BackgroundColor3 = Colors.GlassPanel
     OptionBtn.BackgroundTransparency = 0.7
@@ -913,9 +786,7 @@ for i, pk in ipairs(PICKAXE_DB) do
     OptionBtn.TextColor3 = Colors.Text
     OptionBtn.Font = Enum.Font.Gotham
     OptionBtn.TextSize = 10
-    OptionBtn.Parent = DropdownList
     Instance.new("UICorner", OptionBtn).CornerRadius = UDim.new(0, 4)
-    
     OptionBtn.MouseButton1Click:Connect(function()
         targetPickaxeName = pk.name
         targetPickaxeId = pk.id
@@ -923,11 +794,9 @@ for i, pk in ipairs(PICKAXE_DB) do
         autoBuyEnabled = true
         hasCheckedOwnership = false
         buyStatus = "Siap beli (ID: "..pk.id..")"
-        
         DropdownList.Size = UDim2.new(1, 0, 0, 0)
         isDropdownOpen = false
         DropdownBtn.Text = "▼ Pilih Kapak"
-        
         showNotif("🛒 AUTO BUY AKTIF", "Menunggu uang cukup untuk " .. pk.name, 5)
     end)
 end
@@ -935,8 +804,7 @@ end
 DropdownBtn.MouseButton1Click:Connect(function()
     isDropdownOpen = not isDropdownOpen
     if isDropdownOpen then
-        local totalHeight = (#PICKAXE_DB * 27) 
-        DropdownList.Size = UDim2.new(1, 0, 0, totalHeight)
+        DropdownList.Size = UDim2.new(1, 0, 0, #PICKAXE_DB * 27)
         DropdownBtn.Text = "▲ Tutup Pilihan"
     else
         DropdownList.Size = UDim2.new(1, 0, 0, 0)
@@ -948,23 +816,18 @@ HomeBtn.MouseButton1Click:Connect(function()
     SetHomeActive(true); SetAutoBuyActive(false)
     HomeTab.Visible = true; AutoBuyTab.Visible = false
 end)
-
 AutoBuyBtn.MouseButton1Click:Connect(function() 
     SetHomeActive(false); SetAutoBuyActive(true)
     HomeTab.Visible = false; AutoBuyTab.Visible = true
 end)
-
 SetHomeActive(true)
 
-local FloatingBtn = Instance.new("ImageButton")
+local FloatingBtn = Instance.new("ImageButton", ScreenGui)
 FloatingBtn.Size = UDim2.new(0, 50, 0, 50)
 FloatingBtn.Position = UDim2.new(0, 20, 0, 20) 
-FloatingBtn.BackgroundTransparency = 0
 FloatingBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 FloatingBtn.Image = "rbxassetid://71161700474373" 
-FloatingBtn.Visible = true 
 FloatingBtn.ZIndex = 100 
-FloatingBtn.Parent = ScreenGui
 Instance.new("UICorner", FloatingBtn).CornerRadius = UDim.new(1, 0)
 
 local draggingFloating = false
@@ -978,11 +841,8 @@ FloatingBtn.InputBegan:Connect(function(input)
         isDragging = false
         dragStartPos = input.Position
         startPos = FloatingBtn.Position
-        
         input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                draggingFloating = false
-            end
+            if input.UserInputState == Enum.UserInputState.End then draggingFloating = false end
         end)
     end
 end)
@@ -990,37 +850,27 @@ end)
 UserInputService.InputChanged:Connect(function(input)
     if draggingFloating and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         local delta = input.Position - dragStartPos
-        if delta.Magnitude > 5 then
-            isDragging = true
-        end
-        
-        FloatingBtn.Position = UDim2.new(
-            startPos.X.Scale, startPos.X.Offset + delta.X,
-            startPos.Y.Scale, startPos.Y.Offset + delta.Y
-        )
+        if delta.Magnitude > 5 then isDragging = true end
+        FloatingBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
 
 FloatingBtn.MouseButton1Click:Connect(function()
     if isDragging then return end
-    
-    if MainFrame.Visible then
-        MainFrame.Visible = false
-    else
-        MainFrame.Visible = true
-        MainFrame.Size = UDim2.new(0, 400, 0, 320)
-    end
+    MainFrame.Visible = not MainFrame.Visible
 end)
+MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
 
-local isMinimized = false
-MinBtn.MouseButton1Click:Connect(function()
-    MainFrame.Visible = false
-end)
-
+-- ═══════════ [ LOOP UTAMA ] ═══════════
 task.spawn(function()
     print("✅ Monitor Break & Steal berjalan!")
-
     while task.wait(INTERVAL) do
+        -- ⭐ ANTI-DOUBLE LOOP
+        if not _G.BreakSteal_Hub_Active or _G.BreakSteal_LoopBroken then
+            print("🛑 [Loop] Mematikan loop lama karena ada script baru.")
+            break
+        end
+
         local money_str, speed_str = getMyData()
         local money_num = parseNumber(money_str)
         
@@ -1032,19 +882,16 @@ task.spawn(function()
         
         if is_monitoring then
             local speed_num = parseNumber(speed_str)
-            
             if not is_buying_pickaxe and not is_income_done and (money_num >= targetIncome) then
                 is_income_done = true 
                 onTargetReached()
                 sendToDiscord(money_str, speed_str, "+ AUTO FARM STOPPED (" .. tostring(activeProfileName) .. ")")
                 is_speed_done = false 
             end
-
             if is_farm_stopped and not is_speed_done and targetSpeedValue > 0 then
                 if speed_num >= targetSpeedValue then
                     is_speed_done = true
                     print("⚡ Speed target tercapai! Cek apakah kapak udah dibeli...")
-                    
                     if autoBuyEnabled then
                         local currentCash = getRealCash()
                         if currentCash < targetBuyPrice then
@@ -1076,7 +923,6 @@ task.spawn(function()
             elseif is_farm_stopped then
                 if is_monitoring then isAllowedToJump = true end
             end
-
             if isAllowedToJump then
                 local currentSpeedNum = parseNumber(speed_str) 
                 if currentSpeedNum > lastSpeedCheck then
@@ -1089,7 +935,6 @@ task.spawn(function()
                 else
                     if hasSpeedIncreased then stuckTimer = stuckTimer + INTERVAL end
                 end
-
                 if hasSpeedIncreased and stuckTimer >= 6 then
                     local char = player.Character
                     local humanoid = char and char:FindFirstChild("Humanoid")
@@ -1137,40 +982,31 @@ end)
 local function autoReExecute()
     local url = "https://raw.githubusercontent.com/ellan8888/monitor-income/refs/heads/main/monitor.lua"
     local scriptToRun = "loadstring(game:HttpGet('" .. url .. "'))()"
-    
     local success = pcall(function()
-        if syn and syn.queue_on_teleport then
-            syn.queue_on_teleport(scriptToRun)
-        elseif queue_on_teleport then
-            queue_on_teleport(scriptToRun)
-        elseif fluxus and fluxus.queue_on_teleport then
-            fluxus.queue_on_teleport(scriptToRun)
-        elseif getgenv().queue_on_teleport then
-            getgenv().queue_on_teleport(scriptToRun)
-        end
+        if syn and syn.queue_on_teleport then syn.queue_on_teleport(scriptToRun); return "Synapse"
+        elseif queue_on_teleport then queue_on_teleport(scriptToRun); return "Universal"
+        elseif fluxus and fluxus.queue_on_teleport then fluxus.queue_on_teleport(scriptToRun); return "Fluxus"
+        elseif getgenv().queue_on_teleport then getgenv().queue_on_teleport(scriptToRun); return "Genv" end
+        return nil
     end)
-    
-    if not success then
-        warn("⚠️ Executor kamu nggak support queue_on_teleport. Pakai folder autoexec aja.")
+    if success and success ~= true then
+        print("✅ [Auto-Execute] Berhasil dipasang menggunakan: " .. tostring(success))
+    else
+        warn("⚠️ [Auto-Execute] GAGAL! Executor kamu nggak support queue_on_teleport.")
+        warn("⚠️ SOLUSI: Pindahkan file script ini ke folder AutoExecute di executor kamu.")
     end
 end
 
--- ⭐ AUTO-LOAD STATE PAS SCRIPT JALAN
+-- ⭐ AUTO-LOAD STATE
 task.spawn(function()
-    task.wait(3) -- Tunggu UI dan monitor siap
+    task.wait(3)
     local savedProfile = loadState()
     if savedProfile and savedProfile ~= "None" then
         print("🔄 [Auto-Load] Restoring profile: " .. savedProfile)
-        -- Cari toggle yang namanya cocok, terus nyalain
         for i, cfg in ipairs(CONFIG_DB) do
             if cfg.name == savedProfile and monitorToggles[i] then
-                -- Trigger toggle secara programatik
                 monitorToggles[i].SetState(true)
-                -- Karena SetState cuma update visual, kita perlu panggil callback-nya manual
-                -- Panggil callback dengan state=true
-                if toggleCallbacks[i] then
-                    toggleCallbacks[i](true)
-                end
+                if toggleCallbacks[i] then toggleCallbacks[i](true) end
                 break
             end
         end

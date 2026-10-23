@@ -1,6 +1,19 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg + Speed Sniper (v27 - Fixed Drag)
+-- 🥚 V-Ziir0 Hub: Steal An Egg + Speed Sniper (v30 - Hop Fixed)
 -- ═══════════════════════════════════════════════════════
+
+-- ⭐ SISTEM ANTI-DOUBLE EXECUTE
+if _G.StealEgg_Hub_Active then
+    pcall(function()
+        if _G.StealEgg_Hub_UI then _G.StealEgg_Hub_UI:Destroy() end
+        if _G.StealEgg_LoopBroken then _G.StealEgg_LoopBroken = true end
+    end)
+    print("♻️ [Anti-Double] Menghapus script Steal An Egg yang lama...")
+    task.wait(0.5)
+end
+_G.StealEgg_Hub_Active = true
+_G.StealEgg_Hub_UI = nil
+_G.StealEgg_LoopBroken = false
 
 local player = game.Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
@@ -217,9 +230,21 @@ local function hopServer()
     isHopping = true
     print("🚀 [SNIPER] Target DITEMUKAN & SPEED TINGGI, kabur nge-hop server...")
     
+    -- ⭐ KUNCI PERBAIKAN: Pasang queue_on_teleport TEPAT SEBELUM Hop
+    local url = "https://raw.githubusercontent.com/ellan8888/monitor-income/refs/heads/main/steal_an_egg.lua" 
+    local scriptToRun = "loadstring(game:HttpGet('" .. url .. "'))()"
+    pcall(function()
+        if syn and syn.queue_on_teleport then syn.queue_on_teleport(scriptToRun)
+        elseif queue_on_teleport then queue_on_teleport(scriptToRun)
+        elseif fluxus and fluxus.queue_on_teleport then fluxus.queue_on_teleport(scriptToRun) end
+    end)
+    
+    -- Kasih jeda dikit biar executor sempet proses antrean
+    task.wait(0.5)
+
     local PLACE_ID = game.PlaceId
-    local url = "https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100"
-    local success, response = pcall(function() return HttpService:JSONDecode(game:HttpGet(url)) end)
+    local url_api = "https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100"
+    local success, response = pcall(function() return HttpService:JSONDecode(game:HttpGet(url_api)) end)
     
     if success and response and response.data then
         for _, server in ipairs(response.data) do
@@ -243,6 +268,7 @@ ScreenGui.Name = "VZiir0HubGlass"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.DisplayOrder = 999 
 ScreenGui.Parent = CoreGui
+_G.StealEgg_Hub_UI = ScreenGui -- Simpan untuk anti-double
 
 local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Size = UDim2.new(0, 400, 0, 320) 
@@ -284,7 +310,10 @@ CloseBtn.Position = UDim2.new(1, -30, 0, 3)
 CloseBtn.BackgroundTransparency = 1
 CloseBtn.Text = "✖"
 CloseBtn.TextColor3 = Colors.TextDim
-CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+CloseBtn.MouseButton1Click:Connect(function() 
+    _G.StealEgg_Hub_Active = false
+    ScreenGui:Destroy() 
+end)
 
 local MinBtn = Instance.new("TextButton", TopBar)
 MinBtn.Size = UDim2.new(0, 25, 0, 25)
@@ -454,6 +483,12 @@ task.spawn(function()
     local monitorCounter = 0
     
     while task.wait(1) do
+        -- ⭐ CEK ANTI-DOUBLE
+        if not _G.StealEgg_Hub_Active or _G.StealEgg_LoopBroken then
+            print("🛑 [Loop] Mematikan loop lama karena ada script baru.")
+            break
+        end
+        
         if is_monitoring then
             sniperCounter = sniperCounter + 1
             monitorCounter = monitorCounter + 1
@@ -518,7 +553,6 @@ local function autoReExecute()
         print("✅ [Auto-Execute] Berhasil dipasang menggunakan: " .. tostring(success))
     else
         warn("⚠️ [Auto-Execute] GAGAL! Executor kamu nggak support queue_on_teleport.")
-        warn("⚠️ SOLUSI: Pindahkan file script ini ke folder AutoExecute di executor kamu.")
     end
 end
 
