@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg Monitor (Last Map Egg)
+-- 🥚 V-Ziir0 Hub: Steal An Egg Monitor (FULL V19)
 -- ═══════════════════════════════════════════════════════
 
 local player = game.Players.LocalPlayer
@@ -65,7 +65,7 @@ local function cleanNumber(str)
     return str ~= "" and str or "0"
 end
 
--- ═══════════ [ FITUR MAP & EGG SCANNER ] ═══════════
+-- ═══════════ [ FITUR MAP & EGG SCANNER (V19 LOGIC) ] ═══════════
 local function getFarthestMapAndEgg()
     local char = player.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return "Unknown", 0 end
@@ -92,48 +92,69 @@ local function getFarthestMapAndEgg()
         end
     end
 
-    -- 2. Scan Isi Backpack untuk Egg Map Terjauh
-    local backpackGui = playerGui:FindFirstChild("BackpackGui")
+    -- 2. Scan Isi Backpack + Hotbar + Nil + Dipegang untuk Map Terjauh
     local totalEggFisik = 0
+    local backpackGui = playerGui:FindFirstChild("BackpackGui")
 
-    if backpackGui then
-        backpackGui.Enabled = true
+    local function checkSlot(slot)
+        local toolNameLabel = slot:FindFirstChild("ToolName") or slot:FindFirstChild("Name")
+        local itemName = nil
         
-        local inventoryFrame = backpackGui:FindFirstChild("Backpack")
-        if inventoryFrame then
-            inventoryFrame = inventoryFrame:FindFirstChild("Main")
-            if inventoryFrame then
-                inventoryFrame = inventoryFrame:FindFirstChild("Inventory")
-                if inventoryFrame then
-                    inventoryFrame = inventoryFrame:FindFirstChild("ScrollingFrame")
+        if toolNameLabel and toolNameLabel:IsA("TextLabel") then
+            itemName = toolNameLabel.Text
+        elseif slot:IsA("ImageLabel") or slot:IsA("TextButton") then
+            for _, desc in ipairs(slot:GetDescendants()) do
+                if desc:IsA("TextLabel") and desc.Text ~= "" then
+                    itemName = desc.Text
+                    break
                 end
             end
         end
 
-        if inventoryFrame then
-            for _, slot in ipairs(inventoryFrame:GetChildren()) do
-                if slot:IsA("Frame") or slot:IsA("ImageLabel") or slot:IsA("TextButton") then
-                    local toolNameLabel = slot:FindFirstChild("ToolName") or slot:FindFirstChild("Name")
-                    if toolNameLabel and toolNameLabel:IsA("TextLabel") then
-                        local itemName = toolNameLabel.Text
-                        
-                        -- Cek apakah nama item mengandung nama map terjauh (misal "Enchanted Forest Egg")
-                        if itemName:lower():find(farthestMapName:lower()) and itemName:lower():find("egg") then
-                            local multiplier = 1
-                            -- Cari perkalian (x2, x3, dll)
-                            for _, desc in ipairs(slot:GetDescendants()) do
-                                if desc:IsA("TextLabel") and desc ~= toolNameLabel then
-                                    local matchMulti = string.match(desc.Text, "[xX](%d+)")
-                                    if matchMulti then
-                                        multiplier = tonumber(matchMulti) or 1
-                                        break
-                                    end
-                                end
-                            end
-                            totalEggFisik = totalEggFisik + multiplier
-                        end
-                    end
+        if itemName and itemName:lower():find("egg") and itemName:lower():find(farthestMapName:lower()) then
+            local multiplier = 1
+            for _, desc in ipairs(slot:GetDescendants()) do
+                if desc:IsA("TextLabel") then
+                    local matchMulti = string.match(desc.Text, "[xX](%d+)")
+                    if matchMulti then multiplier = tonumber(matchMulti) or 1 end
                 end
+            end
+            totalEggFisik = totalEggFisik + multiplier
+        end
+    end
+
+    -- A. Scan Backpack
+    if backpackGui then
+        backpackGui.Enabled = true
+        local invFrame = backpackGui:FindFirstChild("Backpack")
+        if invFrame then invFrame = invFrame:FindFirstChild("Main") end
+        if invFrame then invFrame = invFrame:FindFirstChild("Inventory") end
+        if invFrame then invFrame = invFrame:FindFirstChild("ScrollingFrame") end
+
+        if invFrame then
+            for _, slot in ipairs(invFrame:GetChildren()) do
+                if slot:IsA("Frame") or slot:IsA("ImageLabel") or slot:IsA("TextButton") then
+                    checkSlot(slot)
+                end
+            end
+        end
+    end
+
+    -- B. Scan Tool yang dipegang
+    for _, obj in ipairs(char:GetChildren()) do
+        if obj:IsA("Tool") and obj.Name:lower():find("egg") and obj.Name:lower():find(farthestMapName:lower()) then
+            totalEggFisik = totalEggFisik + 1
+        end
+    end
+
+    -- C. Scan Nil Instances (Hotbar)
+    if getnilinstances then
+        for _, obj in ipairs(getnilinstances()) do
+            local success, isEggTool = pcall(function()
+                return obj:IsA("Tool") and obj.Name:lower():find("egg") and obj.Name:lower():find(farthestMapName:lower())
+            end)
+            if success and isEggTool then
+                totalEggFisik = totalEggFisik + 1
             end
         end
     end
@@ -155,7 +176,7 @@ local function getMyData()
         end
         if money ~= "0" and speed ~= "0" then return money, speed end
     end
-    -- (Fallback UI scraping tetap sama seperti script asli kamu)
+    -- (Fallback UI scraping tetap sama)
     return money, speed
 end
 
@@ -185,7 +206,7 @@ task.spawn(function()
         local money, speed = getMyData()
         local mapName, eggCount = getFarthestMapAndEgg()
         
-        -- Kirim jika ada perubahan data (uang, speed, atau jumlah egg di map terjauh berubah)
+        -- Kirim jika ada perubahan data
         if money ~= lastMoney or speed ~= lastSpeed or eggCount ~= lastEggCount or mapName ~= lastMapName then
             sendToDiscord(money, speed, mapName, eggCount)
             lastMoney, lastSpeed = money, speed
