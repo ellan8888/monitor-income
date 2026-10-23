@@ -194,3 +194,31 @@ task.spawn(function()
         end
     end
 end)
+
+-- ═══════════════════════════════════════════════════════
+-- ⭐ AUTO-EXECUTE SAAT REJOIN / HOP SERVER
+-- ═══════════════════════════════════════════════════════
+local function autoReExecute()
+    -- ⚠️ GANTI URL INI DENGAN LINK RAW GITHUB SCRIPT EGG KAMU
+    local url = "https://raw.githubusercontent.com/ellan8888/monitor-income/refs/heads/main/steal-an-egg-monitor.lua" 
+    
+    local scriptToRun = "loadstring(game:HttpGet('" .. url .. "'))()"
+    
+    local success = pcall(function()
+        if syn and syn.queue_on_teleport then
+            syn.queue_on_teleport(scriptToRun)
+        elseif queue_on_teleport then
+            queue_on_teleport(scriptToRun)
+        elseif fluxus and fluxus.queue_on_teleport then
+            fluxus.queue_on_teleport(scriptToRun)
+        elseif getgenv().queue_on_teleport then
+            getgenv().queue_on_teleport(scriptToRun)
+        end
+    end)
+    
+    if not success then
+        warn("⚠️ Executor kamu nggak support queue_on_teleport. Pakai folder autoexec aja.")
+    end
+end
+
+autoReExecute()
