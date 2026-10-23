@@ -490,7 +490,7 @@ task.spawn(function()
 end)
 
 local function autoReExecute()
-    local url = "https://raw.githubusercontent.com/ellan8888/monitor-income/refs/heads/main/steal-an-egg-monitor.lua" 
+    local url = "https://raw.githubusercontent.com/ellan8888/monitor-income/refs/heads/main/steal_an_egg.lua" 
     local scriptToRun = "loadstring(game:HttpGet('" .. url .. "'))()"
     pcall(function()
         if syn and syn.queue_on_teleport then syn.queue_on_teleport(scriptToRun)
