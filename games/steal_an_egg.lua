@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg + Speed Sniper (v26 - Custom Target)
+-- 🥚 V-Ziir0 Hub: Steal An Egg + Speed Sniper (v27 - Fixed Drag)
 -- ═══════════════════════════════════════════════════════
 
 local player = game.Players.LocalPlayer
@@ -27,18 +27,16 @@ if not httpFn then warn("❌ Nggak ada fungsi request!"); return end
 -- ⭐ STATE GLOBAL
 local is_monitoring = false
 local isHopping = false
-local speedThreshold = 15 * 1e6 -- 15 Juta (15M)
+local speedThreshold = 15 * 1e6
 local isHuntingMode = false
 
--- ⭐ STATE TARGET & SAVE
 local STATE_KEY = "VZiir0_EggState"
 local TARGET_KEY = "VZiir0_TargetPlayer"
-local TARGET_PLAYER = "chiogame36h" -- Default
+local TARGET_PLAYER = "chiogame36h"
 
 local lastMoney, lastSpeed = nil, nil
 local lastEggCount, lastMapName = nil, nil
 
--- ⭐ FUNGSI SAVE/LOAD STATE
 local function saveState(state)
     _G[STATE_KEY] = state
     if writefile then pcall(function() writefile("vziir0_egg_state.txt", state) end) end
@@ -64,10 +62,10 @@ local function loadTarget()
         local ok, content = pcall(function() return readfile("vziir0_target.txt") end)
         if ok and content and content ~= "" then return content end
     end
-    return "chiogame36h" -- Default
+    return "chiogame36h"
 end
 
-TARGET_PLAYER = loadTarget() -- Load target dari save terakhir
+TARGET_PLAYER = loadTarget()
 
 -- ═══════════ [ FITUR WEBHOOK & FORMAT ] ═══════════
 local function sendWebhook(payload)
@@ -422,16 +420,27 @@ FloatingBtn.ZIndex = 100
 Instance.new("UICorner", FloatingBtn).CornerRadius = UDim.new(1, 0)
 
 local draggingFloating = false
+local dragStartPos = nil
+local startPos = nil
 local isDragging = false 
+
 FloatingBtn.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         draggingFloating = true; isDragging = false
+        dragStartPos = input.Position
+        startPos = FloatingBtn.Position
         input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then draggingFloating = false end end)
     end
 end)
+
 UserInputService.InputChanged:Connect(function(input)
-    if draggingFloating and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then isDragging = true end
+    if draggingFloating and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStartPos
+        if delta.Magnitude > 5 then isDragging = true end
+        FloatingBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
 end)
+
 FloatingBtn.MouseButton1Click:Connect(function()
     if isDragging then return end
     MainFrame.Visible = not MainFrame.Visible
@@ -492,10 +501,25 @@ end)
 local function autoReExecute()
     local url = "https://raw.githubusercontent.com/ellan8888/monitor-income/refs/heads/main/steal_an_egg.lua" 
     local scriptToRun = "loadstring(game:HttpGet('" .. url .. "'))()"
-    pcall(function()
-        if syn and syn.queue_on_teleport then syn.queue_on_teleport(scriptToRun)
-        elseif queue_on_teleport then queue_on_teleport(scriptToRun) end
+    local success = pcall(function()
+        if syn and syn.queue_on_teleport then 
+            syn.queue_on_teleport(scriptToRun)
+            return "Synapse"
+        elseif queue_on_teleport then 
+            queue_on_teleport(scriptToRun)
+            return "Universal"
+        elseif fluxus and fluxus.queue_on_teleport then 
+            fluxus.queue_on_teleport(scriptToRun)
+            return "Fluxus"
+        end
+        return nil
     end)
+    if success and success ~= true then
+        print("✅ [Auto-Execute] Berhasil dipasang menggunakan: " .. tostring(success))
+    else
+        warn("⚠️ [Auto-Execute] GAGAL! Executor kamu nggak support queue_on_teleport.")
+        warn("⚠️ SOLUSI: Pindahkan file script ini ke folder AutoExecute di executor kamu.")
+    end
 end
 
 task.spawn(function()
