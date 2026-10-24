@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg + Speed Sniper (v30 - Hop Fixed)
+-- 🥚 V-Ziir0 Hub: Steal An Egg + Speed Sniper (v31 - BigFroot Integration)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ SISTEM ANTI-DOUBLE EXECUTE
@@ -50,6 +50,10 @@ local TARGET_PLAYER = "chiogame36h"
 local lastMoney, lastSpeed = nil, nil
 local lastEggCount, lastMapName = nil, nil
 
+-- ⭐ VARIABEL BUAT BIGFROOT AUTO PLACE
+local BigFrootFlags = nil
+local isBigFrootAutoPlaceOn = false
+
 local function saveState(state)
     _G[STATE_KEY] = state
     if writefile then pcall(function() writefile("vziir0_egg_state.txt", state) end) end
@@ -79,6 +83,20 @@ local function loadTarget()
 end
 
 TARGET_PLAYER = loadTarget()
+
+-- ═══════════ [ FUNGSI KONTROL BIGFROOT AUTO PLACE ] ═══════════
+local function setBigFrootAutoPlace(state)
+    local bigFrootSAE = getgenv().__BigFrootSAE
+    if bigFrootSAE and bigFrootSAE.Flags then
+        bigFrootSAE.Flags.AutoPlaceAll = state
+        isBigFrootAutoPlaceOn = state
+        print("🔄 [BigFroot] AutoPlaceAll = " .. tostring(state))
+        return true
+    else
+        -- warn("⚠️ BigFroot nggak terdeteksi. Auto Place nggak bisa diubah.")
+        return false
+    end
+end
 
 -- ═══════════ [ FITUR WEBHOOK & FORMAT ] ═══════════
 local function sendWebhook(payload)
@@ -230,7 +248,6 @@ local function hopServer()
     isHopping = true
     print("🚀 [SNIPER] Target DITEMUKAN & SPEED TINGGI, kabur nge-hop server...")
     
-    -- ⭐ KUNCI PERBAIKAN: Pasang queue_on_teleport TEPAT SEBELUM Hop
     local url = "https://raw.githubusercontent.com/ellan8888/monitor-income/refs/heads/main/steal_an_egg.lua" 
     local scriptToRun = "loadstring(game:HttpGet('" .. url .. "'))()"
     pcall(function()
@@ -239,7 +256,6 @@ local function hopServer()
         elseif fluxus and fluxus.queue_on_teleport then fluxus.queue_on_teleport(scriptToRun) end
     end)
     
-    -- Kasih jeda dikit biar executor sempet proses antrean
     task.wait(0.5)
 
     local PLACE_ID = game.PlaceId
@@ -268,7 +284,7 @@ ScreenGui.Name = "VZiir0HubGlass"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.DisplayOrder = 999 
 ScreenGui.Parent = CoreGui
-_G.StealEgg_Hub_UI = ScreenGui -- Simpan untuk anti-double
+_G.StealEgg_Hub_UI = ScreenGui
 
 local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Size = UDim2.new(0, 400, 0, 320) 
@@ -427,6 +443,11 @@ SwitchBg.InputBegan:Connect(function(input)
         end
         is_monitoring = isToggleOn
         saveState(isToggleOn and "On" or "Off")
+        
+        -- ⭐ OTOMATIS NYALAIN AUTO PLACE PAS MONITOR AKTIF
+        if isToggleOn then
+            setBigFrootAutoPlace(true)
+        end
     end
 end)
 
@@ -501,6 +522,9 @@ task.spawn(function()
                     if not isHuntingMode then
                         isHuntingMode = true
                         print("🎯 [SNIPER] Speed > 15M! Mode Hunter aktif.")
+                        -- ⭐ MATIKAN AUTO PLACE KARENA SPEED UDAH CUKUP
+                        setBigFrootAutoPlace(false)
+                        StatusLbl.Text = "Status: Speed 15M tercapai! Auto Place MATI, mencari target..."
                     end
                     
                     local targetFound = false
@@ -516,6 +540,10 @@ task.spawn(function()
                     end
                 else
                     isHuntingMode = false
+                    -- ⭐ NYALAIN AUTO PLACE KARENA SPEED MASIH DI BAWAH 15M
+                    if not isBigFrootAutoPlaceOn then
+                        setBigFrootAutoPlace(true)
+                    end
                     StatusLbl.Text = "Status: Nunggu Speed 15M (Sekarang: " .. formatNumber(currentSpeed) .. ")"
                 end
             end
@@ -564,6 +592,9 @@ task.spawn(function()
         is_monitoring = true
         SwitchBg.BackgroundColor3 = Colors.Accent
         Knob.Position = UDim2.new(1, -16, 0.5, -7)
+        
+        -- ⭐ NYALAIN AUTO PLACE PAS AUTO-LOAD
+        setBigFrootAutoPlace(true)
     end
 end)
 
