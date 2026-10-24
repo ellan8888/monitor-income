@@ -1,14 +1,14 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg + Speed Sniper (v31 - BigFroot Integration)
+-- 🥚 V-Ziir0 Hub: Steal An Egg (v32 - Persistent State)
 -- ═══════════════════════════════════════════════════════
 
--- ⭐ SISTEM ANTI-DOUBLE EXECUTE
+-- ⭐ SISTEM ANTI-DOUBLE (Pake _G biar anti-reset)
 if _G.StealEgg_Hub_Active then
     pcall(function()
         if _G.StealEgg_Hub_UI then _G.StealEgg_Hub_UI:Destroy() end
         if _G.StealEgg_LoopBroken then _G.StealEgg_LoopBroken = true end
     end)
-    print("♻️ [Anti-Double] Menghapus script Steal An Egg yang lama...")
+    print("♻️ [Anti-Double] Menghapus script lama...")
     task.wait(0.5)
 end
 _G.StealEgg_Hub_Active = true
@@ -37,68 +37,64 @@ local httpFn = request or http_request or (http and http.request)
 
 if not httpFn then warn("❌ Nggak ada fungsi request!"); return end
 
--- ⭐ STATE GLOBAL
-local is_monitoring = false
-local isHopping = false
+-- ═══════════ [ STATE & CONFIG ] ═══════════
+_G.StealEgg_Config = _G.StealEgg_Config or {
+    MonitorEnabled = false,
+    WebhookEnabled = false,
+    AutoPlaceEnabled = true,
+    TargetPlayer = "chiogame36h"
+}
+
+local config = _G.StealEgg_Config
+local is_monitoring = config.MonitorEnabled
+local is_hopping = false
 local speedThreshold = 15 * 1e6
 local isHuntingMode = false
-
-local STATE_KEY = "VZiir0_EggState"
-local TARGET_KEY = "VZiir0_TargetPlayer"
-local TARGET_PLAYER = "chiogame36h"
-
 local lastMoney, lastSpeed = nil, nil
 local lastEggCount, lastMapName = nil, nil
 
--- ⭐ VARIABEL BUAT BIGFROOT AUTO PLACE
-local BigFrootFlags = nil
-local isBigFrootAutoPlaceOn = false
-
-local function saveState(state)
-    _G[STATE_KEY] = state
-    if writefile then pcall(function() writefile("vziir0_egg_state.txt", state) end) end
-end
-
-local function loadState()
-    if _G[STATE_KEY] then return _G[STATE_KEY] end
-    if readfile and isfile and isfile("vziir0_egg_state.txt") then
-        local ok, content = pcall(function() return readfile("vziir0_egg_state.txt") end)
-        if ok and content then return content end
+-- ═══════════ [ FUNGSI SAVE/LOAD CONFIG ] ═══════════
+local function saveConfig()
+    if writefile then
+        pcall(function()
+            local json = HttpService:JSONEncode(config)
+            writefile("vziir0_config.json", json)
+        end)
     end
-    return "Off"
 end
 
-local function saveTarget(targetName)
-    _G[TARGET_KEY] = targetName
-    if writefile then pcall(function() writefile("vziir0_target.txt", targetName) end) end
-end
-
-local function loadTarget()
-    if _G[TARGET_KEY] and _G[TARGET_KEY] ~= "" then return _G[TARGET_KEY] end
-    if readfile and isfile and isfile("vziir0_target.txt") then
-        local ok, content = pcall(function() return readfile("vziir0_target.txt") end)
-        if ok and content and content ~= "" then return content end
+local function loadConfig()
+    if readfile and isfile and isfile("vziir0_config.json") then
+        local ok, content = pcall(function() return readfile("vziir0_config.json") end)
+        if ok and content and content ~= "" then
+            local ok2, data = pcall(function() return HttpService:JSONDecode(content) end)
+            if ok2 and data then
+                for k, v in pairs(data) do
+                    config[k] = v
+                end
+                is_monitoring = config.MonitorEnabled
+                return true
+            end
+        end
     end
-    return "chiogame36h"
+    return false
 end
 
-TARGET_PLAYER = loadTarget()
+-- Coba load config yang tersimpan
+loadConfig()
 
--- ═══════════ [ FUNGSI KONTROL BIGFROOT AUTO PLACE ] ═══════════
+-- ═══════════ [ FUNGSI BIGFROOT ] ═══════════
 local function setBigFrootAutoPlace(state)
     local bigFrootSAE = getgenv().__BigFrootSAE
     if bigFrootSAE and bigFrootSAE.Flags then
         bigFrootSAE.Flags.AutoPlaceAll = state
-        isBigFrootAutoPlaceOn = state
         print("🔄 [BigFroot] AutoPlaceAll = " .. tostring(state))
         return true
-    else
-        -- warn("⚠️ BigFroot nggak terdeteksi. Auto Place nggak bisa diubah.")
-        return false
     end
+    return false
 end
 
--- ═══════════ [ FITUR WEBHOOK & FORMAT ] ═══════════
+-- ═══════════ [ WEBHOOK ] ═══════════
 local function sendWebhook(payload)
     local body = HttpService:JSONEncode(payload)
     for attempt = 1, 3 do
@@ -113,6 +109,25 @@ local function sendWebhook(payload)
     return false
 end
 
+local function sendMonitorWebhook(money, speed, mapName, eggCount)
+    if not config.WebhookEnabled then return end
+    local embed = {
+        title = "🥚 STEAL AN EGG MONITOR 🥚",
+        description = "```ini\n[ @" .. player.Name .. " ]```\n**━━━━━━━━━━━━━━━━━━━━━━━━**",
+        color = 0xFFAA00,
+        fields = {
+            { name = "💰 ▸ INCOME", value = "```yaml\n" .. money .. "```", inline = true },
+            { name = "⚡ ▸ SPEED", value = "```yaml\n" .. speed .. "```", inline = true },
+            { name = "🗺️ ▸ LAST MAP", value = "```yaml\n" .. mapName .. "```", inline = true },
+            { name = "🥚 ▸ EGG " .. mapName:upper(), value = "```yaml\n" .. eggCount .. " Egg```", inline = true },
+        },
+        footer = { text = "V-Ziir0 Hub • " .. os.date("%H:%M:%S") },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+    }
+    sendWebhook({ username = "🥚 Egg Monitor", avatar_url = "https://cdn-icons-png.flaticon.com/512/1055/1055687.png", embeds = { embed } })
+end
+
+-- ═══════════ [ FORMAT & SCANNER ] ═══════════
 local function formatNumber(num)
     local n = tonumber(num)
     if not n then return tostring(num) end
@@ -126,84 +141,6 @@ local function cleanNumber(str)
     if not str then return "0" end
     str = tostring(str):gsub("[^%d%a%.%,]", ""):gsub("[sS]$", "")
     return str ~= "" and str or "0"
-end
-
--- ═══════════ [ FITUR MAP & EGG SCANNER ] ═══════════
-local function getFarthestMapAndEgg()
-    local char = player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return "Unknown", 0 end
-    local hrp = char.HumanoidRootPart
-    local world = Workspace:FindFirstChild("World")
-    local areas = world and world:FindFirstChild("Areas")
-    local guardAreas = areas and areas:FindFirstChild("GuardAreas")
-    local farthestMapName = "Unknown"
-    local maxDist = 0
-
-    if guardAreas then
-        for _, area in ipairs(guardAreas:GetChildren()) do
-            local part = area:FindFirstChildWhichIsA("BasePart", true)
-            if part then
-                local dist = (hrp.Position - part.Position).Magnitude
-                if dist > maxDist then
-                    maxDist = dist
-                    farthestMapName = area.Name
-                end
-            end
-        end
-    end
-
-    local totalEggFisik = 0
-    local backpackGui = player:WaitForChild("PlayerGui"):FindFirstChild("BackpackGui")
-
-    local function checkSlot(slot)
-        local toolNameLabel = slot:FindFirstChild("ToolName") or slot:FindFirstChild("Name")
-        local itemName = nil
-        if toolNameLabel and toolNameLabel:IsA("TextLabel") then itemName = toolNameLabel.Text
-        elseif slot:IsA("ImageLabel") or slot:IsA("TextButton") then
-            for _, desc in ipairs(slot:GetDescendants()) do
-                if desc:IsA("TextLabel") and desc.Text ~= "" then itemName = desc.Text; break end
-            end
-        end
-        if itemName and itemName:lower():find("egg") and itemName:lower():find(farthestMapName:lower()) then
-            local multiplier = 1
-            for _, desc in ipairs(slot:GetDescendants()) do
-                if desc:IsA("TextLabel") then
-                    local matchMulti = string.match(desc.Text, "[xX](%d+)")
-                    if matchMulti then multiplier = tonumber(matchMulti) or 1 end
-                end
-            end
-            totalEggFisik = totalEggFisik + multiplier
-        end
-    end
-
-    if backpackGui then
-        backpackGui.Enabled = true
-        local invFrame = backpackGui:FindFirstChild("Backpack")
-        if invFrame then invFrame = invFrame:FindFirstChild("Main") end
-        if invFrame then invFrame = invFrame:FindFirstChild("Inventory") end
-        if invFrame then invFrame = invFrame:FindFirstChild("ScrollingFrame") end
-        if invFrame then
-            for _, slot in ipairs(invFrame:GetChildren()) do
-                if slot:IsA("Frame") or slot:IsA("ImageLabel") or slot:IsA("TextButton") then checkSlot(slot) end
-            end
-        end
-    end
-
-    for _, obj in ipairs(char:GetChildren()) do
-        if obj:IsA("Tool") and obj.Name:lower():find("egg") and obj.Name:lower():find(farthestMapName:lower()) then
-            totalEggFisik = totalEggFisik + 1
-        end
-    end
-
-    if getnilinstances then
-        for _, obj in ipairs(getnilinstances()) do
-            local success, isEggTool = pcall(function()
-                return obj:IsA("Tool") and obj.Name:lower():find("egg") and obj.Name:lower():find(farthestMapName:lower())
-            end)
-            if success and isEggTool then totalEggFisik = totalEggFisik + 1 end
-        end
-    end
-    return farthestMapName, totalEggFisik
 end
 
 local function getMyData()
@@ -223,33 +160,18 @@ local function getMyData()
     return money, speed, speedNum
 end
 
--- ═══════════ [ KIRIM KE DISCORD ] ═══════════
-local function sendToDiscord(money, speed, mapName, eggCount)
-    local embed = {
-        title = "🥚 STEAL AN EGG MONITOR 🥚",
-        description = "```ini\n[ @" .. player.Name .. " ]```\n**━━━━━━━━━━━━━━━━━━━━━━━━**",
-        color = 0xFFAA00,
-        fields = {
-            { name = "💰 ▸ INCOME", value = "```yaml\n" .. money .. "```", inline = true },
-            { name = "⚡ ▸ SPEED", value = "```yaml\n" .. speed .. "```", inline = true },
-            { name = "🗺️ ▸ LAST MAP", value = "```yaml\n" .. mapName .. "```", inline = true },
-            { name = "🥚 ▸ EGG " .. mapName:upper(), value = "```yaml\n" .. eggCount .. " Egg```", inline = true },
-            { name = "🎯 ▸ STATUS", value = "```diff\n+ FARMING ACTIVE```", inline = false },
-        },
-        footer = { text = "V-Ziir0 Hub • " .. os.date("%H:%M:%S") },
-        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-    }
-    sendWebhook({ username = "🥚 Egg Monitor", avatar_url = "https://cdn-icons-png.flaticon.com/512/1055/1055687.png", embeds = { embed } })
-end
-
--- ═══════════ [ FITUR SERVER HOP ] ═══════════
+-- ═══════════ [ SERVER HOP ] ═══════════
 local function hopServer()
-    if isHopping then return end
-    isHopping = true
-    print("🚀 [SNIPER] Target DITEMUKAN & SPEED TINGGI, kabur nge-hop server...")
+    if is_hopping then return end
+    is_hopping = true
+    print("🚀 [SNIPER] Nge-hop server...")
+    
+    -- ⭐ PENTING: Save config dulu sebelum hop
+    saveConfig()
     
     local url = "https://raw.githubusercontent.com/ellan8888/monitor-income/refs/heads/main/steal_an_egg.lua" 
     local scriptToRun = "loadstring(game:HttpGet('" .. url .. "'))()"
+    
     pcall(function()
         if syn and syn.queue_on_teleport then syn.queue_on_teleport(scriptToRun)
         elseif queue_on_teleport then queue_on_teleport(scriptToRun)
@@ -271,13 +193,22 @@ local function hopServer()
         end
     end
     warn("❌ Gagal nemu server kosong buat hop.")
-    isHopping = false
+    is_hopping = false
 end
 
 -- ═══════════════════════════════════════════════════════
 -- ⭐ UI CUSTOM (GLASSMORPHISM)
 -- ═══════════════════════════════════════════════════════
-local Colors = { Background = Color3.fromRGB(20, 20, 25), GlassPanel = Color3.fromRGB(40, 40, 50), Border = Color3.fromRGB(255, 255, 255), Accent = Color3.fromRGB(120, 200, 255), Text = Color3.fromRGB(255, 255, 255), TextDim = Color3.fromRGB(180, 180, 190), SwitchOff = Color3.fromRGB(60, 60, 70), }
+local Colors = { 
+    Background = Color3.fromRGB(20, 20, 25), 
+    GlassPanel = Color3.fromRGB(40, 40, 50), 
+    Border = Color3.fromRGB(255, 255, 255), 
+    Accent = Color3.fromRGB(120, 200, 255), 
+    Text = Color3.fromRGB(255, 255, 255), 
+    TextDim = Color3.fromRGB(180, 180, 190), 
+    SwitchOff = Color3.fromRGB(60, 60, 70),
+    Green = Color3.fromRGB(0, 255, 100)
+}
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "VZiir0HubGlass"
@@ -287,7 +218,7 @@ ScreenGui.Parent = CoreGui
 _G.StealEgg_Hub_UI = ScreenGui
 
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 400, 0, 320) 
+MainFrame.Size = UDim2.new(0, 400, 0, 400) 
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.BackgroundColor3 = Colors.Background
@@ -354,16 +285,69 @@ MonitorTab.ScrollBarThickness = 2
 local MonitorLayout = Instance.new("UIListLayout", MonitorTab)
 MonitorLayout.Padding = UDim.new(0, 6)
 
+-- ═══════════ [ HELPER FUNCTIONS UI ] ═══════════
+local function createToggle(name, layoutOrder, defaultState, callback)
+    local Frame = Instance.new("Frame", MonitorTab)
+    Frame.Size = UDim2.new(1, 0, 0, 35)
+    Frame.BackgroundTransparency = 1
+    Frame.LayoutOrder = layoutOrder
+    
+    local Label = Instance.new("TextLabel", Frame)
+    Label.Size = UDim2.new(1, -50, 1, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = name
+    Label.TextColor3 = Colors.Text
+    Label.Font = Enum.Font.GothamMedium
+    Label.TextSize = 12
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local SwitchBg = Instance.new("Frame", Frame)
+    SwitchBg.Size = UDim2.new(0, 36, 0, 18)
+    SwitchBg.Position = UDim2.new(1, -36, 0.5, -9)
+    SwitchBg.BackgroundColor3 = defaultState and Colors.Accent or Colors.SwitchOff
+    Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
+    
+    local Knob = Instance.new("Frame", SwitchBg)
+    Knob.Size = UDim2.new(0, 14, 0, 14)
+    Knob.Position = defaultState and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
+    Knob.BackgroundColor3 = Colors.Text
+    Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
+    
+    local isOn = defaultState
+    local function updateVisual(state)
+        isOn = state
+        if isOn then
+            TweenService:Create(SwitchBg, TweenInfo.new(0.2), {BackgroundColor3 = Colors.Accent}):Play()
+            TweenService:Create(Knob, TweenInfo.new(0.2), {Position = UDim2.new(1, -16, 0.5, -7)}):Play() 
+        else
+            TweenService:Create(SwitchBg, TweenInfo.new(0.2), {BackgroundColor3 = Colors.SwitchOff}):Play()
+            TweenService:Create(Knob, TweenInfo.new(0.2), {Position = UDim2.new(0, 2, 0.5, -7)}):Play()
+        end
+    end
+    
+    SwitchBg.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            local newState = not isOn
+            updateVisual(newState)
+            if callback then callback(newState) end
+        end
+    end)
+    
+    return { SetState = updateVisual, GetState = function() return isOn end }
+end
+
+-- ═══════════ [ UI ELEMENTS ] ═══════════
 local MonitorTitle = Instance.new("TextLabel", MonitorTab)
 MonitorTitle.Size = UDim2.new(1, 0, 0, 20)
 MonitorTitle.BackgroundTransparency = 1
-MonitorTitle.Text = "Target: " .. TARGET_PLAYER .. " | Min Speed: 15M"
+MonitorTitle.Text = "Target: " .. config.TargetPlayer
 MonitorTitle.TextColor3 = Colors.Accent
 MonitorTitle.Font = Enum.Font.GothamBold
 MonitorTitle.TextSize = 12
 MonitorTitle.TextXAlignment = Enum.TextXAlignment.Left
+MonitorTitle.LayoutOrder = 1
 
--- ═══════════ [ INPUT TARGET BARU ] ═══════════
+-- Target Input
 local InputFrame = Instance.new("Frame", MonitorTab)
 InputFrame.Size = UDim2.new(1, 0, 0, 30)
 InputFrame.BackgroundColor3 = Colors.GlassPanel
@@ -375,8 +359,8 @@ local TargetInput = Instance.new("TextBox", InputFrame)
 TargetInput.Size = UDim2.new(1, -70, 1, 0)
 TargetInput.Position = UDim2.new(0, 5, 0, 0)
 TargetInput.BackgroundTransparency = 1
-TargetInput.Text = TARGET_PLAYER
-TargetInput.PlaceholderText = "Ketik Username Target..."
+TargetInput.Text = config.TargetPlayer
+TargetInput.PlaceholderText = "Username Target..."
 TargetInput.TextColor3 = Colors.Text
 TargetInput.Font = Enum.Font.Gotham
 TargetInput.TextSize = 12
@@ -394,68 +378,45 @@ SaveBtn.TextSize = 12
 Instance.new("UICorner", SaveBtn).CornerRadius = UDim.new(0, 6)
 
 SaveBtn.MouseButton1Click:Connect(function()
-    local newTarget = TargetInput.Text
-    if newTarget and newTarget ~= "" then
-        TARGET_PLAYER = newTarget
-        saveTarget(newTarget)
-        MonitorTitle.Text = "Target: " .. TARGET_PLAYER .. " | Min Speed: 15M"
-        StarterGui:SetCore("SendNotification", {Title = "Target Diganti", Text = "Target baru: " .. TARGET_PLAYER, Duration = 3})
-        print("🎯 Target diganti ke: " .. TARGET_PLAYER)
+    if TargetInput.Text ~= "" then
+        config.TargetPlayer = TargetInput.Text
+        MonitorTitle.Text = "Target: " .. config.TargetPlayer
+        saveConfig()
+        StarterGui:SetCore("SendNotification", {Title = "Target Diganti", Text = "Target: " .. config.TargetPlayer, Duration = 3})
     end
 end)
 
--- ═══════════ [ TOGGLE MONITOR ] ═══════════
-local ToggleFrame = Instance.new("Frame", MonitorTab)
-ToggleFrame.Size = UDim2.new(1, 0, 0, 35)
-ToggleFrame.BackgroundTransparency = 1
-ToggleFrame.LayoutOrder = 3
-
-local ToggleLabel = Instance.new("TextLabel", ToggleFrame)
-ToggleLabel.Size = UDim2.new(1, -50, 1, 0)
-ToggleLabel.BackgroundTransparency = 1
-ToggleLabel.Text = "Aktifkan Monitor & Speed Sniper"
-ToggleLabel.TextColor3 = Colors.Text
-ToggleLabel.TextSize = 12
-ToggleLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-local SwitchBg = Instance.new("Frame", ToggleFrame)
-SwitchBg.Size = UDim2.new(0, 36, 0, 18)
-SwitchBg.Position = UDim2.new(1, -36, 0.5, -9)
-SwitchBg.BackgroundColor3 = Colors.SwitchOff
-Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
-
-local Knob = Instance.new("Frame", SwitchBg)
-Knob.Size = UDim2.new(0, 14, 0, 14)
-Knob.Position = UDim2.new(0, 2, 0.5, -7)
-Knob.BackgroundColor3 = Colors.Text
-Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
-
-local isToggleOn = false
-SwitchBg.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        isToggleOn = not isToggleOn
-        if isToggleOn then
-            TweenService:Create(SwitchBg, TweenInfo.new(0.2), {BackgroundColor3 = Colors.Accent}):Play()
-            TweenService:Create(Knob, TweenInfo.new(0.2), {Position = UDim2.new(1, -16, 0.5, -7)}):Play() 
-        else
-            TweenService:Create(SwitchBg, TweenInfo.new(0.2), {BackgroundColor3 = Colors.SwitchOff}):Play()
-            TweenService:Create(Knob, TweenInfo.new(0.2), {Position = UDim2.new(0, 2, 0.5, -7)}):Play()
-        end
-        is_monitoring = isToggleOn
-        saveState(isToggleOn and "On" or "Off")
-        
-        -- ⭐ OTOMATIS NYALAIN AUTO PLACE PAS MONITOR AKTIF
-        if isToggleOn then
-            setBigFrootAutoPlace(true)
-        end
+-- Toggle Monitor
+local monitorToggle = createToggle("Aktifkan Monitor & Speed Sniper", 3, config.MonitorEnabled, function(state)
+    config.MonitorEnabled = state
+    is_monitoring = state
+    saveConfig()
+    if state then
+        setBigFrootAutoPlace(true)
     end
+end)
+
+-- Toggle Webhook
+local webhookToggle = createToggle("Aktifkan Kirim Webhook", 4, config.WebhookEnabled, function(state)
+    config.WebhookEnabled = state
+    saveConfig()
+    if state then
+        StarterGui:SetCore("SendNotification", {Title = "Webhook Aktif", Text = "Monitor akan dikirim ke Discord.", Duration = 3})
+    end
+end)
+
+-- Toggle Auto Place
+local autoPlaceToggle = createToggle("Aktifkan Auto Place (BigFroot)", 5, config.AutoPlaceEnabled, function(state)
+    config.AutoPlaceEnabled = state
+    saveConfig()
+    setBigFrootAutoPlace(state)
 end)
 
 local StatusLbl = Instance.new("TextLabel", MainFrame)
 StatusLbl.Size = UDim2.new(1, 0, 0, 15)
 StatusLbl.Position = UDim2.new(0, 0, 1, -15)
 StatusLbl.BackgroundTransparency = 1
-StatusLbl.Text = "Status: Idle"
+StatusLbl.Text = "Status: " .. (is_monitoring and "Monitor ON" or "Idle")
 StatusLbl.TextColor3 = Colors.TextDim
 StatusLbl.TextSize = 10
 StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -463,7 +424,6 @@ StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
 local FloatingBtn = Instance.new("ImageButton", ScreenGui)
 FloatingBtn.Size = UDim2.new(0, 50, 0, 50)
 FloatingBtn.Position = UDim2.new(0, 20, 0, 20) 
-FloatingBtn.BackgroundTransparency = 0
 FloatingBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 FloatingBtn.Image = "rbxassetid://71161700474373" 
 FloatingBtn.ZIndex = 100 
@@ -498,15 +458,14 @@ end)
 MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
 
 -- ═══════════ [ LOOP UTAMA ] ═══════════
--- ═══════════ [ LOOP UTAMA (FIXED) ] ═══════════
 task.spawn(function()
-    print("✅ Monitor & Speed Sniper berjalan!")
+    print("✅ Loop berjalan!")
     local sniperCounter = 0
     local monitorCounter = 0
     
     while task.wait(1) do
         if not _G.StealEgg_Hub_Active or _G.StealEgg_LoopBroken then
-            print("🛑 [Loop] Mematikan loop lama karena ada script baru.")
+            print("🛑 [Loop] Berhenti.")
             break
         end
         
@@ -514,12 +473,10 @@ task.spawn(function()
             sniperCounter = sniperCounter + 1
             monitorCounter = monitorCounter + 1
 
-            -- ⭐ CEK SPEED & SINKRONISASI AUTO PLACE
-            if sniperCounter >= SNIPER_INTERVAL and not isHopping then
+            if sniperCounter >= SNIPER_INTERVAL and not is_hopping then
                 sniperCounter = 0
                 local _, _, currentSpeed = getMyData()
                 
-                -- Ambil status asli dari BigFroot
                 local bigFrootSAE = getgenv().__BigFrootSAE
                 local realAutoPlaceStatus = false
                 if bigFrootSAE and bigFrootSAE.Flags then
@@ -527,90 +484,67 @@ task.spawn(function()
                 end
                 
                 if currentSpeed >= speedThreshold then
-                    -- KONDISI 1: SPEED UDAH CUKUP (>= 15M)
-                    -- Paksa matiin Auto Place, apapun statusnya
                     if realAutoPlaceStatus then
                         setBigFrootAutoPlace(false)
-                        print("🛑 [Sniper] Speed 15M+, Auto Place dipaksa MATI.")
+                        print("🛑 Speed 15M+, Auto Place MATI.")
                     end
-                    
-                    if not isHuntingMode then
-                        isHuntingMode = true
-                        StatusLbl.Text = "Status: Speed 15M tercapai! Auto Place MATI, mencari target..."
-                    end
+                    isHuntingMode = true
                     
                     local targetFound = false
                     for _, p in ipairs(Players:GetPlayers()) do
-                        if p.Name:lower() == TARGET_PLAYER:lower() then targetFound = true; break end
+                        if p.Name:lower() == config.TargetPlayer:lower() then targetFound = true; break end
                     end
                     
                     if targetFound then
-                        StatusLbl.Text = "Status: Target " .. TARGET_PLAYER .. " ADA! Nge-hop..."
+                        StatusLbl.Text = "Status: Target KETEMU! Hop..."
                         hopServer()
                     else
-                        StatusLbl.Text = "Status: Target TIDAK ADA. Aman farming..."
+                        StatusLbl.Text = "Status: Target nggak ada. Aman..."
                     end
                 else
-                    -- KONDISI 2: SPEED MASIH DI BAWAH 15M
-                    -- Paksa nyalain Auto Place, apapun statusnya
                     if not realAutoPlaceStatus then
                         setBigFrootAutoPlace(true)
-                        print("✅ [Sniper] Speed < 15M, Auto Place dipaksa NYALA.")
+                        print("✅ Speed < 15M, Auto Place NYALA.")
                     end
-                    
                     isHuntingMode = false
-                    StatusLbl.Text = "Status: Nunggu Speed 15M (Sekarang: " .. formatNumber(currentSpeed) .. ")"
+                    StatusLbl.Text = "Status: Nunggu Speed 15M (" .. formatNumber(currentSpeed) .. ")"
                 end
             end
             
-            -- ⭐ WEBHOOK MONITOR (Tiap 15 detik)
             if monitorCounter >= INTERVAL then
                 monitorCounter = 0
                 local money, speed, _ = getMyData()
-                local mapName, eggCount = getFarthestMapAndEgg()
-                if money ~= lastMoney or speed ~= lastSpeed or eggCount ~= lastEggCount or mapName ~= lastMapName then
-                    sendToDiscord(money, speed, mapName, eggCount)
-                    lastMoney, lastSpeed, lastEggCount, lastMapName = money, speed, eggCount, mapName
-                end
+                local mapName, eggCount = "Unknown", 0
+                sendMonitorWebhook(money, speed, mapName, eggCount)
+                lastMoney, lastSpeed = money, speed
             end
         end
     end
 end)
 
+-- ═══════════ [ AUTO EXECUTE & AUTO LOAD ] ═══════════
 local function autoReExecute()
     local url = "https://raw.githubusercontent.com/ellan8888/monitor-income/refs/heads/main/steal_an_egg.lua" 
     local scriptToRun = "loadstring(game:HttpGet('" .. url .. "'))()"
-    local success = pcall(function()
-        if syn and syn.queue_on_teleport then 
-            syn.queue_on_teleport(scriptToRun)
-            return "Synapse"
-        elseif queue_on_teleport then 
-            queue_on_teleport(scriptToRun)
-            return "Universal"
-        elseif fluxus and fluxus.queue_on_teleport then 
-            fluxus.queue_on_teleport(scriptToRun)
-            return "Fluxus"
-        end
-        return nil
+    pcall(function()
+        if syn and syn.queue_on_teleport then syn.queue_on_teleport(scriptToRun)
+        elseif queue_on_teleport then queue_on_teleport(scriptToRun)
+        elseif fluxus and fluxus.queue_on_teleport then fluxus.queue_on_teleport(scriptToRun) end
     end)
-    if success and success ~= true then
-        print("✅ [Auto-Execute] Berhasil dipasang menggunakan: " .. tostring(success))
-    else
-        warn("⚠️ [Auto-Execute] GAGAL! Executor kamu nggak support queue_on_teleport.")
-    end
 end
 
 task.spawn(function()
     task.wait(3)
-    if loadState() == "On" then
-        print("🔄 [Auto-Load] Menyalakan Monitor & Sniper")
-        isToggleOn = true
-        is_monitoring = true
-        SwitchBg.BackgroundColor3 = Colors.Accent
-        Knob.Position = UDim2.new(1, -16, 0.5, -7)
-        
-        -- ⭐ NYALAIN AUTO PLACE PAS AUTO-LOAD
-        setBigFrootAutoPlace(true)
+    -- Update UI based on config
+    monitorToggle.SetState(config.MonitorEnabled)
+    webhookToggle.SetState(config.WebhookEnabled)
+    autoPlaceToggle.SetState(config.AutoPlaceEnabled)
+    
+    if config.MonitorEnabled then
+        print("🔄 [Auto-Load] Monitor ON")
+        if config.AutoPlaceEnabled then
+            setBigFrootAutoPlace(true)
+        end
     end
 end)
 
