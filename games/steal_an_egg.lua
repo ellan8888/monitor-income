@@ -498,13 +498,13 @@ end)
 MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
 
 -- ═══════════ [ LOOP UTAMA ] ═══════════
+-- ═══════════ [ LOOP UTAMA (FIXED) ] ═══════════
 task.spawn(function()
     print("✅ Monitor & Speed Sniper berjalan!")
     local sniperCounter = 0
     local monitorCounter = 0
     
     while task.wait(1) do
-        -- ⭐ CEK ANTI-DOUBLE
         if not _G.StealEgg_Hub_Active or _G.StealEgg_LoopBroken then
             print("🛑 [Loop] Mematikan loop lama karena ada script baru.")
             break
@@ -514,16 +514,28 @@ task.spawn(function()
             sniperCounter = sniperCounter + 1
             monitorCounter = monitorCounter + 1
 
+            -- ⭐ CEK SPEED & SINKRONISASI AUTO PLACE
             if sniperCounter >= SNIPER_INTERVAL and not isHopping then
                 sniperCounter = 0
                 local _, _, currentSpeed = getMyData()
                 
+                -- Ambil status asli dari BigFroot
+                local bigFrootSAE = getgenv().__BigFrootSAE
+                local realAutoPlaceStatus = false
+                if bigFrootSAE and bigFrootSAE.Flags then
+                    realAutoPlaceStatus = bigFrootSAE.Flags.AutoPlaceAll
+                end
+                
                 if currentSpeed >= speedThreshold then
+                    -- KONDISI 1: SPEED UDAH CUKUP (>= 15M)
+                    -- Paksa matiin Auto Place, apapun statusnya
+                    if realAutoPlaceStatus then
+                        setBigFrootAutoPlace(false)
+                        print("🛑 [Sniper] Speed 15M+, Auto Place dipaksa MATI.")
+                    end
+                    
                     if not isHuntingMode then
                         isHuntingMode = true
-                        print("🎯 [SNIPER] Speed > 15M! Mode Hunter aktif.")
-                        -- ⭐ MATIKAN AUTO PLACE KARENA SPEED UDAH CUKUP
-                        setBigFrootAutoPlace(false)
                         StatusLbl.Text = "Status: Speed 15M tercapai! Auto Place MATI, mencari target..."
                     end
                     
@@ -539,15 +551,19 @@ task.spawn(function()
                         StatusLbl.Text = "Status: Target TIDAK ADA. Aman farming..."
                     end
                 else
-                    isHuntingMode = false
-                    -- ⭐ NYALAIN AUTO PLACE KARENA SPEED MASIH DI BAWAH 15M
-                    if not isBigFrootAutoPlaceOn then
+                    -- KONDISI 2: SPEED MASIH DI BAWAH 15M
+                    -- Paksa nyalain Auto Place, apapun statusnya
+                    if not realAutoPlaceStatus then
                         setBigFrootAutoPlace(true)
+                        print("✅ [Sniper] Speed < 15M, Auto Place dipaksa NYALA.")
                     end
+                    
+                    isHuntingMode = false
                     StatusLbl.Text = "Status: Nunggu Speed 15M (Sekarang: " .. formatNumber(currentSpeed) .. ")"
                 end
             end
             
+            -- ⭐ WEBHOOK MONITOR (Tiap 15 detik)
             if monitorCounter >= INTERVAL then
                 monitorCounter = 0
                 local money, speed, _ = getMyData()
