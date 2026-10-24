@@ -845,17 +845,20 @@ local StepsLayout = Instance.new("UIListLayout", StepsRow)
 StepsLayout.FillDirection = Enum.FillDirection.Horizontal
 StepsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 StepsLayout.Padding = UDim.new(0, 6)
+StepsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center -- ⬅️ TAMBAHIN INI
 
-local StepNames = { "Income", "Speed", "Kapak" }
-local StepIconKeys = { "coin", "bolt", "pickaxe" }
+-- ⭐ KITA BIKIN STEP PILLS-NYA BISA DINAMIS
 local StepPills = {}
-for i, nm in ipairs(StepNames) do
+local MaxSteps = 3
+for i = 1, MaxSteps do
     local P = Instance.new("Frame")
     P.Size = UDim2.new(0, 101, 1, 0)
     P.BackgroundColor3 = Colors.GlassPanel
     P.LayoutOrder = i
+    P.Visible = false -- Default sembunyi, nanti di-set sama sistem
     P.Parent = StepsRow
     Instance.new("UICorner", P).CornerRadius = UDim.new(0, 8)
+    
     local Row = Instance.new("Frame", P)
     Row.Size = UDim2.new(1, 0, 1, 0)
     Row.BackgroundTransparency = 1
@@ -865,15 +868,19 @@ for i, nm in ipairs(StepNames) do
     Lay.VerticalAlignment = Enum.VerticalAlignment.Center
     Lay.SortOrder = Enum.SortOrder.LayoutOrder
     Lay.Padding = UDim.new(0, 5)
-    local Ic = MakeIcon(Row, StepIconKeys[i], 12, Colors.TextDim)
+    
+    local Ic = MakeIcon(Row, "coin", 12, Colors.TextDim)
     Ic.LayoutOrder = 1
+    
     local Ck = MakeIcon(Row, "check", 12, Colors.Green)
     Ck.LayoutOrder = 1
     Ck.Visible = false
-    local L = NewLabel(Row, nm, 10, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
+    
+    local L = NewLabel(Row, "", 10, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
     L.AutomaticSize = Enum.AutomaticSize.X
     L.Size = UDim2.new(0, 0, 1, 0)
     L.LayoutOrder = 2
+    
     StepPills[i] = { Frame = P, Label = L, Icon = Ic, Check = Ck }
 end
 
@@ -1240,21 +1247,53 @@ local function ApplyView(v)
     SubLbl.TextColor3 = v.color
     CaptionLbl.Text = v.caption
 
+    -- ⭐ LOGIKA BARU: Tentukan tampilan langkah berdasarkan mode
+    local currentSteps = {}
+    if is_monitoring then
+        -- Mode Monitor: Income > Speed > Kapak
+        currentSteps = {
+            { name = "Income", icon = "coin" },
+            { name = "Speed", icon = "bolt" },
+            { name = "Kapak", icon = "pickaxe" }
+        }
+    elseif autoBuyEnabled then
+        -- Mode Auto Buy (Monitor Mati): Cuma Kapak
+        currentSteps = {
+            { name = "Pickaxe", icon = "pickaxe" }
+        }
+    end
+
+    -- Update visual step pills
     for i, pill in ipairs(StepPills) do
-        local done = (v.idx == 4 or v.idx > i)
-        pill.Icon.Visible = not done
-        pill.Check.Visible = done
-        if done then
-            pill.Frame.BackgroundColor3 = Colors.GlassPanel
-            pill.Label.TextColor3 = Colors.Green
-        elseif v.idx == i then
-            pill.Frame.BackgroundColor3 = Colors.ChipOn
-            pill.Label.TextColor3 = v.color
-            SetIconColor(pill.Icon, v.color)
+        local stepData = currentSteps[i]
+        if stepData then
+            pill.Frame.Visible = true
+            pill.Label.Text = stepData.name
+            
+            -- Ganti ikon (karena ikonnya di-make saat awal, kita hapus dan bikin baru)
+            if pill.Icon and pill.Icon.Parent then pill.Icon:Destroy() end
+            local newIcon = MakeIcon(pill.Label.Parent, stepData.icon, 12, Colors.TextDim)
+            newIcon.LayoutOrder = 1
+            pill.Icon = newIcon
+            
+            local done = (v.idx == 4 or v.idx > i)
+            pill.Icon.Visible = not done
+            pill.Check.Visible = done
+            
+            if done then
+                pill.Frame.BackgroundColor3 = Colors.GlassPanel
+                pill.Label.TextColor3 = Colors.Green
+            elseif v.idx == i then
+                pill.Frame.BackgroundColor3 = Colors.ChipOn
+                pill.Label.TextColor3 = v.color
+                SetIconColor(pill.Icon, v.color)
+            else
+                pill.Frame.BackgroundColor3 = Colors.GlassPanel
+                pill.Label.TextColor3 = Colors.TextDim
+                SetIconColor(pill.Icon, Colors.TextDim)
+            end
         else
-            pill.Frame.BackgroundColor3 = Colors.GlassPanel
-            pill.Label.TextColor3 = Colors.TextDim
-            SetIconColor(pill.Icon, Colors.TextDim)
+            pill.Frame.Visible = false
         end
     end
 
