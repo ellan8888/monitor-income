@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg (v36 - Monitor Priority)
+-- 🥚 V-Ziir0 Hub: Steal An Egg (v37 - Auto Place Integrated)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ SISTEM ANTI-DOUBLE
@@ -41,7 +41,6 @@ if not httpFn then warn("❌ Nggak ada fungsi request!"); return end
 _G.StealEgg_Config = _G.StealEgg_Config or {
     MonitorEnabled = false,
     WebhookEnabled = false, -- Ini buat webhook manual
-    AutoPlaceEnabled = true,
     DetectedTargets = {},
     LastHopJobId = nil,
     OriginalTargets = {},
@@ -165,7 +164,6 @@ local function sendWebhook(payload)
 end
 
 local function sendMonitorWebhook(money, speed, mapName, eggCount, statusText)
-    -- Cek apakah MONITOR aktif ATAU Webhook manual aktif
     if not is_monitoring and not config.WebhookEnabled then return end
     
     local embed = {
@@ -180,7 +178,7 @@ local function sendMonitorWebhook(money, speed, mapName, eggCount, statusText)
             { name = "🎯 ▸ TARGETS", value = "```yaml\n" .. #config.DetectedTargets .. " players tracked\nHop: " .. config.HopCount .. "```", inline = true },
             { name = "📌 ▸ STATUS", value = "```diff\n" .. statusText .. "```", inline = false },
         },
-        footer = { text = "V-Ziir0 Hub v36 • " .. os.date("%H:%M:%S") },
+        footer = { text = "V-Ziir0 Hub v37 • " .. os.date("%H:%M:%S") },
         timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
     }
     sendWebhook({ username = "🥚 Egg Monitor", avatar_url = "https://cdn.flaticon.com/512/1055/1055687.png", embeds = { embed } })
@@ -483,14 +481,18 @@ local function createToggle(name, layoutOrder, defaultState, callback)
         end
     end)
 
-    return { SetState = updateVisual, GetState = function() return isOn end }
+    return { 
+        SetState = updateVisual, 
+        GetState = function() return isOn end,
+        Callback = callback 
+    }
 end
 
 -- ═══════════ [ UI ELEMENTS ] ═══════════
 local MonitorTitle = Instance.new("TextLabel", MonitorTab)
 MonitorTitle.Size = UDim2.new(1, 0, 0, 20)
 MonitorTitle.BackgroundTransparency = 1
-MonitorTitle.Text = "Mode: Auto-Detect Target (v36)"
+MonitorTitle.Text = "Mode: Auto-Detect Target (v37)"
 MonitorTitle.TextColor3 = Colors.Accent
 MonitorTitle.Font = Enum.Font.GothamBold
 MonitorTitle.TextSize = 12
@@ -505,9 +507,8 @@ local monitorToggle = createToggle("Aktifkan Monitor Egg Last Map", 3, config.Mo
     is_monitoring = state
     
     if state then
-        setBigFrootAutoPlace(true)
+        setBigFrootAutoPlace(true) -- ⭐ Monitor ON -> Auto Place Nyala
         
-        -- ⭐ FIX UTAMA: Matiin toogle webhook visual biar ga double
         if webhookToggle then webhookToggle.SetState(false) end 
         config.WebhookEnabled = false 
         
@@ -518,16 +519,16 @@ local monitorToggle = createToggle("Aktifkan Monitor Egg Last Map", 3, config.Mo
         for _, n in ipairs(initial) do table.insert(config.DetectedTargets, n) end
         print("📋 [Target] Snapshot awal: " .. #config.DetectedTargets .. " player.")
         
-        StarterGui:SetCore("SendNotification", {Title = "Monitor Egg ON", Text = "Webhook Monitor aktif. Toggle webhook manual dimatikan.", Duration = 5})
+        StarterGui:SetCore("SendNotification", {Title = "Monitor Egg ON", Text = "Auto Place aktif. Webhook manual mati.", Duration = 5})
     else
-        StarterGui:SetCore("SendNotification", {Title = "Monitor Egg OFF", Text = "Monitor berhenti.", Duration = 3})
+        setBigFrootAutoPlace(false) -- ⭐ Monitor OFF -> Auto Place Mati
+        StarterGui:SetCore("SendNotification", {Title = "Monitor Egg OFF", Text = "Monitor & Auto Place berhenti.", Duration = 3})
     end
     saveConfig()
 end)
 
 -- Toggle Webhook Manual
 webhookToggle = createToggle("Aktifkan Kirim Webhook Manual", 4, config.WebhookEnabled, function(state)
-    -- Cegah nyalain webhook manual kalau monitor lagi jalan
     if is_monitoring then
         webhookToggle.SetState(false)
         StarterGui:SetCore("SendNotification", {Title = "⚠️ Webhook Terkunci", Text = "Matikan Monitor dulu kalau mau pake webhook manual.", Duration = 4})
@@ -539,13 +540,6 @@ webhookToggle = createToggle("Aktifkan Kirim Webhook Manual", 4, config.WebhookE
     if state then
         StarterGui:SetCore("SendNotification", {Title = "Webhook Manual Aktif", Text = "Monitor akan dikirim ke Discord.", Duration = 3})
     end
-end)
-
--- Toggle Auto Place
-local autoPlaceToggle = createToggle("Aktifkan Auto Place (BigFroot)", 5, config.AutoPlaceEnabled, function(state)
-    config.AutoPlaceEnabled = state
-    saveConfig()
-    setBigFrootAutoPlace(state)
 end)
 
 -- Tombol Reset Target
@@ -626,7 +620,6 @@ task.spawn(function()
             break
         end
 
-        -- Jalan kalau Monitor nyala ATAU Webhook manual nyala
         if is_monitoring or config.WebhookEnabled then
             local money, speed, _ = getMyData()
             local mapName, eggCount = getFarthestMapAndEgg()
@@ -653,9 +646,24 @@ task.spawn(function()
 
         if is_monitoring then
             sniperCounter = sniperCounter + 1
+            local _, _, currentSpeed = getMyData()
+
+            -- ⭐ LOGIKA AUTO PLACE DI DALAM MONITOR
+            if currentSpeed < speedThreshold then
+                -- Speed < 15M: Auto Place NYALA
+                if getgenv().__BigFrootSAE and getgenv().__BigFrootSAE.Flags and not getgenv().__BigFrootSAE.Flags.AutoPlaceAll then
+                    setBigFrootAutoPlace(true)
+                    print("✅ [Speed < 15M] Auto Place NYALA.")
+                end
+            else
+                -- Speed >= 15M: Auto Place MATI
+                if getgenv().__BigFrootSAE and getgenv().__BigFrootSAE.Flags and getgenv().__BigFrootSAE.Flags.AutoPlaceAll then
+                    setBigFrootAutoPlace(false)
+                    print("🛑 [Speed >= 15M] Auto Place MATI.")
+                end
+            end
 
             if sniperCounter % 10 == 0 then
-                local _, _, currentSpeed = getMyData()
                 if currentSpeed < speedThreshold then
                     local added = mergeTargets(scanCurrentPlayers())
                     if added > 0 then
@@ -667,7 +675,6 @@ task.spawn(function()
 
             if sniperCounter >= SNIPER_INTERVAL and not is_hopping then
                 sniperCounter = 0
-                local _, _, currentSpeed = getMyData()
 
                 if currentSpeed >= speedThreshold then
                     isHuntingMode = true
@@ -706,21 +713,17 @@ end
 task.spawn(function()
     task.wait(3)
     
-    -- Sinkronisasi UI saat Auto-Load
     if config.MonitorEnabled then
         monitorToggle.SetState(true)
-        webhookToggle.SetState(false) -- Webhook manual mati karena Monitor nyala
+        if monitorToggle.Callback then monitorToggle.Callback(true) end
+        webhookToggle.SetState(false)
     else
         monitorToggle.SetState(false)
         webhookToggle.SetState(config.WebhookEnabled)
     end
-    autoPlaceToggle.SetState(config.AutoPlaceEnabled)
 
     if config.MonitorEnabled then
         print("🔄 [Auto-Load] Monitor ON (Webhook Manual OFF)")
-        if config.AutoPlaceEnabled then
-            setBigFrootAutoPlace(true)
-        end
         if #config.DetectedTargets == 0 then
             local fresh = scanCurrentPlayers()
             for _, n in ipairs(fresh) do
