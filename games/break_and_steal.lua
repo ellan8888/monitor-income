@@ -2,22 +2,26 @@
 -- ✨ V-Ziir0 Hub: Break & Steal (Glassmorphism v29 - Anti Double)
 -- ═══════════════════════════════════════════════════════
 
--- ⭐ SISTEM ANTI-DOUBLE EXECUTE
-if _G.BreakSteal_Hub_Active then
-    pcall(function()
-        if _G.BreakSteal_Hub_UI then _G.BreakSteal_Hub_UI:Destroy() end
-        if _G.BreakSteal_LoopBroken then _G.BreakSteal_LoopBroken = true end
-    end)
-    print("♻️ [Anti-Double] Menghapus script Break & Steal yang lama...")
-    task.wait(0.5)
+-- ⭐ -- ⭐ SISTEM ANTI-DOUBLE (Deteksi UI Lama)
+local CoreGui = game:GetService("CoreGui")
+
+-- Hapus UI lama kalau ada (dari eksekusi sebelumnya atau rejoin)
+for _, gui in ipairs(CoreGui:GetChildren()) do
+    if gui:IsA("ScreenGui") and gui.Name == "VZiir0HubGlass" then
+        gui:Destroy()
+        print("♻️ [Anti-Double] Menghapus UI lama...")
+        task.wait(0.2)
+    end
 end
+
+-- Reset state global
 _G.BreakSteal_Hub_Active = true
 _G.BreakSteal_Hub_UI = nil
 _G.BreakSteal_LoopBroken = false
 
 local player = game.Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
-local CoreGui = game:GetService("CoreGui")
+
 local StarterGui = game:GetService("StarterGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
