@@ -1394,6 +1394,13 @@ task.spawn(function()
             else
                 BuyStatusLbl.TextColor3 = Colors.Text
             end
+            
+            -- ⭐ FIX: Kirim progress Auto Buy tiap 15 detik WALAUPUN Monitor mati
+            if not is_monitoring and (os.time() - lastWebhookTime) >= 15 then
+                local m_str, s_str = getMyData()
+                sendToDiscord(m_str, s_str, "🛒 AUTO BUY PROGRESS")
+                lastWebhookTime = os.time()
+            end
         else
             BuyStatusLbl.Text = "Status: Idle (Pilih Kapak)"
             BuyStatusLbl.TextColor3 = Colors.TextDim
