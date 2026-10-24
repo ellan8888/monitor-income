@@ -1,22 +1,25 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (v31 - Compact Ring UI + Icon Pack)
--- CATATAN: Hanya bagian "UI CUSTOM" yang diganti. Semua logika
--- (state, auto buy, monitor, webhook, auto jump, loop utama) sama persis.
+-- ✨ V-Ziir0 Hub: Break & Steal (v32 - Anti-Double Fixed)
 -- ═══════════════════════════════════════════════════════
 
--- ⭐ -- ⭐ SISTEM ANTI-DOUBLE (Deteksi UI Lama)
+-- ⭐ SISTEM ANTI-DOUBLE (Deteksi UI & Loop Lama)
 local CoreGui = game:GetService("CoreGui")
 
--- Hapus UI lama kalau ada (dari eksekusi sebelumnya atau rejoin)
+-- 1. Matikan loop lama kalau ada
+if _G.BreakSteal_LoopBroken ~= nil then
+    _G.BreakSteal_LoopBroken = true 
+    print("🛑 Mematikan loop dari script sebelumnya...")
+    task.wait(0.2)
+end
+
+-- 2. Hapus SEMUA UI lama yang namanya "VZiir0HubGlass"
 for _, gui in ipairs(CoreGui:GetChildren()) do
     if gui:IsA("ScreenGui") and gui.Name == "VZiir0HubGlass" then
         gui:Destroy()
-        print("♻️ [Anti-Double] Menghapus UI lama...")
-        task.wait(0.2)
     end
 end
 
--- Reset state global
+-- 3. Set state baru
 _G.BreakSteal_Hub_Active = true
 _G.BreakSteal_Hub_UI = nil
 _G.BreakSteal_LoopBroken = false
@@ -130,7 +133,6 @@ local PICKAXE_DB = {
 }
 
 -- FUNGSI PENDUKUNG
--- [ICON PATCH] Hapus emoji dari teks yang tampil di layar (hanya tampilan; logika tidak berubah)
 local function StripEmoji(s)
     s = tostring(s)
     local ok, out = pcall(function()
@@ -510,8 +512,6 @@ end
 
 -- ═══════════════════════════════════════════════════════
 -- ⭐ UI CUSTOM (V30 - COMPACT RING)
--- Bagian ini murni tampilan. Variabel logika hanya DIBACA oleh UI,
--- kecuali handler klik yang isinya sama persis dengan versi sebelumnya.
 -- ═══════════════════════════════════════════════════════
 local Colors = {
     Background = Color3.fromRGB(15, 26, 34),
@@ -529,13 +529,10 @@ local Colors = {
     ChipOn = Color3.fromRGB(18, 48, 58),
 }
 
--- ⭐ IKON: semua ikon digambar langsung dari bentuk (Frame), jadi TIDAK butuh asset ID.
--- Opsional: isi "rbxassetid://ID" di tabel ini untuk mengganti ikon tertentu dengan gambar.
 local Icons = {
     pickaxe = "", monitor = "", shop = "", target = "", crown = "", jump = "", close = "", minus = "",
     check = "", hourglass = "", bolt = "", checkc = "", xc = "", coin = "",
 }
--- Label pendek untuk chip (hanya tampilan, nama asli di CONFIG_DB tidak berubah)
 local UI_SHORT = {
     ["Max Account (Income 2T)"] = "Max 2T",
     ["Akun Income 1T"] = "Income 1T",
@@ -543,7 +540,6 @@ local UI_SHORT = {
 
 local IconPaint = setmetatable({}, { __mode = "k" })
 
--- Gambar ikon pada kotak 16x16 (diskalakan ke ukuran ikon)
 local IconDefs = {
     close = function(H) H.line(3.2, 3.2, 12.8, 12.8, 1.8); H.line(12.8, 3.2, 3.2, 12.8, 1.8) end,
     minus = function(H) H.line(3, 8, 13, 8, 1.8) end,
@@ -842,7 +838,6 @@ local HomeTab = Instance.new("Frame", ContentArea)
 HomeTab.Size = UDim2.new(1, 0, 1, 0)
 HomeTab.BackgroundTransparency = 1
 
--- Langkah: Income > Speed > Kapak
 local StepsRow = Instance.new("Frame", HomeTab)
 StepsRow.Size = UDim2.new(1, 0, 0, 24)
 StepsRow.BackgroundTransparency = 1
@@ -882,7 +877,6 @@ for i, nm in ipairs(StepNames) do
     StepPills[i] = { Frame = P, Label = L, Icon = Ic, Check = Ck }
 end
 
--- Ring progress (dua setengah lingkaran + UIGradient pada UIStroke)
 local RING_SIZE, RING_T = 108, 9
 local RingHolder = Instance.new("Frame", HomeTab)
 RingHolder.Size = UDim2.new(0, RING_SIZE, 0, RING_SIZE)
@@ -946,7 +940,6 @@ local CaptionLbl = NewLabel(HomeTab, "Aktifkan target di bawah", 12, Enum.Font.G
 CaptionLbl.Size = UDim2.new(1, 0, 0, 18)
 CaptionLbl.Position = UDim2.new(0, 0, 0, 142)
 
--- Chip: target monitor + auto jump
 local ChipsRow = Instance.new("Frame", HomeTab)
 ChipsRow.Size = UDim2.new(1, 0, 0, 32)
 ChipsRow.Position = UDim2.new(0, 0, 0, 166)
@@ -1017,21 +1010,17 @@ autoJumpToggle.SwitchBg.MouseButton1Click:Connect(function()
     isAutoJumpEnabled = newState
 end)
 
--- Label status (ditulis oleh LOOP UTAMA, nama variabel tetap)
 local StatusLbl = NewLabel(HomeTab, "Status: Pilih target monitor.", 10, Enum.Font.Gotham, Colors.TextDim, Enum.TextXAlignment.Center)
 StatusLbl.Size = UDim2.new(1, 0, 0, 16)
 StatusLbl.Position = UDim2.new(0, 0, 0, 204)
 StatusLbl.TextTruncate = Enum.TextTruncate.AtEnd
 
--- ── Footer: status auto buy (ditulis oleh LOOP UTAMA, nama variabel tetap) ──
 local FooterBar = Instance.new("Frame", MainFrame)
 FooterBar.Size = UDim2.new(1, -16, 0, 28)
 FooterBar.Position = UDim2.new(0, 8, 1, -36)
 FooterBar.BackgroundColor3 = Colors.GlassPanel
 Instance.new("UICorner", FooterBar).CornerRadius = UDim.new(0, 8)
 
--- BuyStatusLbl tetap ditulis oleh LOOP UTAMA (teks asli dari logika ber-emoji). Label ini disembunyikan,
--- isinya DICERMINKAN ke BuyDisplayLbl tanpa emoji, lengkap dengan ikon di sebelah kirinya.
 local BuyStatusLbl = NewLabel(FooterBar, "Status: Idle", 11, Enum.Font.GothamBold, Colors.TextDim)
 BuyStatusLbl.Size = UDim2.new(1, -16, 1, 0)
 BuyStatusLbl.Position = UDim2.new(0, 8, 0, 0)
@@ -1196,8 +1185,6 @@ end)
 MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
 
 -- ═══════════ [ PENYEGAR TAMPILAN (BACA-SAJA) ] ═══════════
--- Fase ring: Income > Speed > Kapak (Galaxy dulu kalau belum punya) > Selesai.
--- Hanya MEMBACA variabel/fungsi yang sudah ada, tidak mengubah state apa pun.
 local ProgressValue = Instance.new("NumberValue")
 local idleMode = true
 ProgressValue.Changed:Connect(function(p)
@@ -1301,7 +1288,6 @@ end)
 task.spawn(function()
     print("✅ Monitor Break & Steal berjalan!")
     while task.wait(INTERVAL) do
-        -- ⭐ ANTI-DOUBLE LOOP
         if not _G.BreakSteal_Hub_Active or _G.BreakSteal_LoopBroken then
             print("🛑 [Loop] Mematikan loop lama karena ada script baru.")
             break
@@ -1416,6 +1402,12 @@ task.spawn(function()
 end)
 
 local function autoReExecute()
+    if _G.VZiir0_AutoExec_Active then
+        print("⚠️ [Auto-Execute] Script udah jalan dari Autoexec. Skip queue_on_teleport.")
+        return
+    end
+    _G.VZiir0_AutoExec_Active = true
+
     local url = "https://raw.githubusercontent.com/ellan8888/monitor-income/refs/heads/main/monitor.lua"
     local scriptToRun = "loadstring(game:HttpGet('" .. url .. "'))()"
     local success = pcall(function()
@@ -1425,12 +1417,8 @@ local function autoReExecute()
         elseif getgenv().queue_on_teleport then getgenv().queue_on_teleport(scriptToRun); return "Genv" end
         return nil
     end)
-    if success and success ~= true then
-        print("✅ [Auto-Execute] Berhasil dipasang menggunakan: " .. tostring(success))
-    else
-        warn("⚠️ [Auto-Execute] GAGAL! Executor kamu nggak support queue_on_teleport.")
-        warn("⚠️ SOLUSI: Pindahkan file script ini ke folder AutoExecute di executor kamu.")
-    end
+    
+    task.delay(5, function() _G.VZiir0_AutoExec_Active = nil end)
 end
 
 -- ⭐ AUTO-LOAD STATE
