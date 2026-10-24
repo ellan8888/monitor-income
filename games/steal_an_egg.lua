@@ -1,8 +1,8 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg (v32 - Persistent State)
+-- 🥚 V-Ziir0 Hub: Steal An Egg (v33 - Webhook Independent)
 -- ═══════════════════════════════════════════════════════
 
--- ⭐ SISTEM ANTI-DOUBLE (Pake _G biar anti-reset)
+-- ⭐ SISTEM ANTI-DOUBLE
 if _G.StealEgg_Hub_Active then
     pcall(function()
         if _G.StealEgg_Hub_UI then _G.StealEgg_Hub_UI:Destroy() end
@@ -50,8 +50,7 @@ local is_monitoring = config.MonitorEnabled
 local is_hopping = false
 local speedThreshold = 15 * 1e6
 local isHuntingMode = false
-local lastMoney, lastSpeed = nil, nil
-local lastEggCount, lastMapName = nil, nil
+local lastMoney, lastSpeed, lastMapName, lastEggCount = nil, nil, nil, nil
 
 -- ═══════════ [ FUNGSI SAVE/LOAD CONFIG ] ═══════════
 local function saveConfig()
@@ -80,7 +79,6 @@ local function loadConfig()
     return false
 end
 
--- Coba load config yang tersimpan
 loadConfig()
 
 -- ═══════════ [ FUNGSI BIGFROOT ] ═══════════
@@ -160,13 +158,90 @@ local function getMyData()
     return money, speed, speedNum
 end
 
+-- ⭐ FITUR MAP & EGG SCANNER (Dikembalikan)
+local function getFarthestMapAndEgg()
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return "Unknown", 0 end
+    local hrp = char.HumanoidRootPart
+    local world = Workspace:FindFirstChild("World")
+    local areas = world and world:FindFirstChild("Areas")
+    local guardAreas = areas and areas:FindFirstChild("GuardAreas")
+    local farthestMapName = "Unknown"
+    local maxDist = 0
+
+    if guardAreas then
+        for _, area in ipairs(guardAreas:GetChildren()) do
+            local part = area:FindFirstChildWhichIsA("BasePart", true)
+            if part then
+                local dist = (hrp.Position - part.Position).Magnitude
+                if dist > maxDist then
+                    maxDist = dist
+                    farthestMapName = area.Name
+                end
+            end
+        end
+    end
+
+    local totalEggFisik = 0
+    local backpackGui = player:WaitForChild("PlayerGui"):FindFirstChild("BackpackGui")
+
+    local function checkSlot(slot)
+        local toolNameLabel = slot:FindFirstChild("ToolName") or slot:FindFirstChild("Name")
+        local itemName = nil
+        if toolNameLabel and toolNameLabel:IsA("TextLabel") then itemName = toolNameLabel.Text
+        elseif slot:IsA("ImageLabel") or slot:IsA("TextButton") then
+            for _, desc in ipairs(slot:GetDescendants()) do
+                if desc:IsA("TextLabel") and desc.Text ~= "" then itemName = desc.Text; break end
+            end
+        end
+        if itemName and itemName:lower():find("egg") and itemName:lower():find(farthestMapName:lower()) then
+            local multiplier = 1
+            for _, desc in ipairs(slot:GetDescendants()) do
+                if desc:IsA("TextLabel") then
+                    local matchMulti = string.match(desc.Text, "[xX](%d+)")
+                    if matchMulti then multiplier = tonumber(matchMulti) or 1 end
+                end
+            end
+            totalEggFisik = totalEggFisik + multiplier
+        end
+    end
+
+    if backpackGui then
+        backpackGui.Enabled = true
+        local invFrame = backpackGui:FindFirstChild("Backpack")
+        if invFrame then invFrame = invFrame:FindFirstChild("Main") end
+        if invFrame then invFrame = invFrame:FindFirstChild("Inventory") end
+        if invFrame then invFrame = invFrame:FindFirstChild("ScrollingFrame") end
+        if invFrame then
+            for _, slot in ipairs(invFrame:GetChildren()) do
+                if slot:IsA("Frame") or slot:IsA("ImageLabel") or slot:IsA("TextButton") then checkSlot(slot) end
+            end
+        end
+    end
+
+    for _, obj in ipairs(char:GetChildren()) do
+        if obj:IsA("Tool") and obj.Name:lower():find("egg") and obj.Name:lower():find(farthestMapName:lower()) then
+            totalEggFisik = totalEggFisik + 1
+        end
+    end
+
+    if getnilinstances then
+        for _, obj in ipairs(getnilinstances()) do
+            local success, isEggTool = pcall(function()
+                return obj:IsA("Tool") and obj.Name:lower():find("egg") and obj.Name:lower():find(farthestMapName:lower())
+            end)
+            if success and isEggTool then totalEggFisik = totalEggFisik + 1 end
+        end
+    end
+    return farthestMapName, totalEggFisik
+end
+
 -- ═══════════ [ SERVER HOP ] ═══════════
 local function hopServer()
     if is_hopping then return end
     is_hopping = true
     print("🚀 [SNIPER] Nge-hop server...")
     
-    -- ⭐ PENTING: Save config dulu sebelum hop
     saveConfig()
     
     local url = "https://raw.githubusercontent.com/ellan8888/monitor-income/refs/heads/main/steal_an_egg.lua" 
@@ -457,21 +532,42 @@ FloatingBtn.MouseButton1Click:Connect(function()
 end)
 MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
 
--- ═══════════ [ LOOP UTAMA ] ═══════════
+-- ═══════════ [ LOOP WEBHOOK (INDEPENDEN) ] ═══════════
 task.spawn(function()
-    print("✅ Loop berjalan!")
+    print("✅ Loop Webhook berjalan!")
+    while task.wait(INTERVAL) do
+        if not _G.StealEgg_Hub_Active or _G.StealEgg_LoopBroken then
+            print("🛑 [Webhook Loop] Berhenti.")
+            break
+        end
+        
+        -- Webhook jalan kalo togglenya nyala, GAK peduli Monitor hidup atau nggak
+        if config.WebhookEnabled then
+            local money, speed, _ = getMyData()
+            local mapName, eggCount = getFarthestMapAndEgg()
+            
+            if money ~= lastMoney or speed ~= lastSpeed or mapName ~= lastMapName or eggCount ~= lastEggCount then
+                sendMonitorWebhook(money, speed, mapName, eggCount)
+                print("📤 [Webhook] Terkirim! Map: " .. mapName .. " | Egg: " .. eggCount)
+                lastMoney, lastSpeed, lastMapName, lastEggCount = money, speed, mapName, eggCount
+            end
+        end
+    end
+end)
+
+-- ═══════════ [ LOOP MONITOR & SNIPER ] ═══════════
+task.spawn(function()
+    print("✅ Loop Monitor & Sniper berjalan!")
     local sniperCounter = 0
-    local monitorCounter = 0
     
     while task.wait(1) do
         if not _G.StealEgg_Hub_Active or _G.StealEgg_LoopBroken then
-            print("🛑 [Loop] Berhenti.")
+            print("🛑 [Monitor Loop] Berhenti.")
             break
         end
         
         if is_monitoring then
             sniperCounter = sniperCounter + 1
-            monitorCounter = monitorCounter + 1
 
             if sniperCounter >= SNIPER_INTERVAL and not is_hopping then
                 sniperCounter = 0
@@ -510,14 +606,6 @@ task.spawn(function()
                     StatusLbl.Text = "Status: Nunggu Speed 15M (" .. formatNumber(currentSpeed) .. ")"
                 end
             end
-            
-            if monitorCounter >= INTERVAL then
-                monitorCounter = 0
-                local money, speed, _ = getMyData()
-                local mapName, eggCount = "Unknown", 0
-                sendMonitorWebhook(money, speed, mapName, eggCount)
-                lastMoney, lastSpeed = money, speed
-            end
         end
     end
 end)
@@ -535,7 +623,6 @@ end
 
 task.spawn(function()
     task.wait(3)
-    -- Update UI based on config
     monitorToggle.SetState(config.MonitorEnabled)
     webhookToggle.SetState(config.WebhookEnabled)
     autoPlaceToggle.SetState(config.AutoPlaceEnabled)
@@ -545,6 +632,9 @@ task.spawn(function()
         if config.AutoPlaceEnabled then
             setBigFrootAutoPlace(true)
         end
+    end
+    if config.WebhookEnabled then
+        print("🔄 [Auto-Load] Webhook ON")
     end
 end)
 
