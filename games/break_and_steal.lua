@@ -1,5 +1,7 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (Glassmorphism v29 - Anti Double)
+-- ✨ V-Ziir0 Hub: Break & Steal (v31 - Compact Ring UI + Icon Pack)
+-- CATATAN: Hanya bagian "UI CUSTOM" yang diganti. Semua logika
+-- (state, auto buy, monitor, webhook, auto jump, loop utama) sama persis.
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ -- ⭐ SISTEM ANTI-DOUBLE (Deteksi UI Lama)
@@ -128,8 +130,27 @@ local PICKAXE_DB = {
 }
 
 -- FUNGSI PENDUKUNG
+-- [ICON PATCH] Hapus emoji dari teks yang tampil di layar (hanya tampilan; logika tidak berubah)
+local function StripEmoji(s)
+    s = tostring(s)
+    local ok, out = pcall(function()
+        local buf = {}
+        for _, cp in utf8.codes(s) do
+            local isEmoji = cp >= 0x1F000
+                or (cp >= 0x2600 and cp <= 0x27BF)
+                or (cp >= 0x2B00 and cp <= 0x2BFF)
+                or (cp >= 0x23E9 and cp <= 0x23FF)
+                or cp == 0xFE0F or cp == 0x200D
+            if not isEmoji then table.insert(buf, utf8.char(cp)) end
+        end
+        return table.concat(buf)
+    end)
+    if not ok then return s end
+    return (out:gsub("^%s+", ""))
+end
+
 local function showNotif(title, text, duration)
-    pcall(function() StarterGui:SetCore("SendNotification", { Title = title, Text = text, Duration = duration or 5 }) end)
+    pcall(function() StarterGui:SetCore("SendNotification", { Title = StripEmoji(title), Text = StripEmoji(text), Duration = duration or 5 }) end)
 end
 
 local function getPickaxeName()
@@ -488,9 +509,165 @@ local function tryBuyPickaxe()
 end
 
 -- ═══════════════════════════════════════════════════════
--- ⭐ UI CUSTOM (GLASSMORPHISM)
+-- ⭐ UI CUSTOM (V30 - COMPACT RING)
+-- Bagian ini murni tampilan. Variabel logika hanya DIBACA oleh UI,
+-- kecuali handler klik yang isinya sama persis dengan versi sebelumnya.
 -- ═══════════════════════════════════════════════════════
-local Colors = { Background = Color3.fromRGB(20, 20, 25), GlassPanel = Color3.fromRGB(40, 40, 50), Border = Color3.fromRGB(255, 255, 255), Accent = Color3.fromRGB(120, 200, 255), Text = Color3.fromRGB(255, 255, 255), TextDim = Color3.fromRGB(180, 180, 190), SwitchOff = Color3.fromRGB(60, 60, 70), }
+local Colors = {
+    Background = Color3.fromRGB(15, 26, 34),
+    GlassPanel = Color3.fromRGB(22, 38, 47),
+    Border = Color3.fromRGB(39, 65, 80),
+    Accent = Color3.fromRGB(25, 195, 217),
+    Text = Color3.fromRGB(234, 246, 251),
+    TextDim = Color3.fromRGB(111, 149, 168),
+    SwitchOff = Color3.fromRGB(45, 70, 84),
+    Green = Color3.fromRGB(79, 227, 168),
+    Amber = Color3.fromRGB(245, 194, 107),
+    Danger = Color3.fromRGB(229, 72, 77),
+    Track = Color3.fromRGB(29, 51, 64),
+    OnAccent = Color3.fromRGB(6, 40, 48),
+    ChipOn = Color3.fromRGB(18, 48, 58),
+}
+
+-- ⭐ IKON: semua ikon digambar langsung dari bentuk (Frame), jadi TIDAK butuh asset ID.
+-- Opsional: isi "rbxassetid://ID" di tabel ini untuk mengganti ikon tertentu dengan gambar.
+local Icons = {
+    pickaxe = "", monitor = "", shop = "", target = "", crown = "", jump = "", close = "", minus = "",
+    check = "", hourglass = "", bolt = "", checkc = "", xc = "", coin = "",
+}
+-- Label pendek untuk chip (hanya tampilan, nama asli di CONFIG_DB tidak berubah)
+local UI_SHORT = {
+    ["Max Account (Income 2T)"] = "Max 2T",
+    ["Akun Income 1T"] = "Income 1T",
+}
+
+local IconPaint = setmetatable({}, { __mode = "k" })
+
+-- Gambar ikon pada kotak 16x16 (diskalakan ke ukuran ikon)
+local IconDefs = {
+    close = function(H) H.line(3.2, 3.2, 12.8, 12.8, 1.8); H.line(12.8, 3.2, 3.2, 12.8, 1.8) end,
+    minus = function(H) H.line(3, 8, 13, 8, 1.8) end,
+    check = function(H) H.line(3, 8.5, 6.5, 12, 1.9); H.line(6.5, 12, 13, 4.5, 1.9) end,
+    pickaxe = function(H) H.line(3, 13, 11.3, 4.7, 1.8); H.line(7.5, 1, 14, 7.5, 2.2) end,
+    monitor = function(H) H.rect(2, 9, 3, 5, 0.15); H.rect(6.5, 5, 3, 9, 0.15); H.rect(11, 2, 3, 12, 0.15) end,
+    shop = function(H)
+        H.line(1.5, 2.5, 3.8, 2.5, 1.6)
+        H.line(3.8, 2.5, 5.2, 10, 1.6)
+        H.line(5.2, 10, 13.2, 10, 1.6)
+        H.line(13.2, 10, 14.2, 4.2, 1.6)
+        H.line(4.3, 4.2, 14.2, 4.2, 1.6)
+        H.dot(6.2, 12.9, 2.6); H.dot(12, 12.9, 2.6)
+    end,
+    target = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.ring(4.5, 4.5, 7, 7, 1.5); H.dot(8, 8, 2.2) end,
+    crown = function(H)
+        H.line(3, 11.2, 3.4, 4.8, 1.6); H.line(3.4, 4.8, 6.2, 8.2, 1.6); H.line(6.2, 8.2, 8, 3.6, 1.6)
+        H.line(8, 3.6, 9.8, 8.2, 1.6); H.line(9.8, 8.2, 12.6, 4.8, 1.6); H.line(12.6, 4.8, 13, 11.2, 1.6)
+        H.line(3, 11.2, 13, 11.2, 1.6); H.line(3.6, 13.4, 12.4, 13.4, 1.6)
+    end,
+    jump = function(H) H.line(8, 13.5, 8, 3, 1.8); H.line(8, 2.8, 3.6, 7.2, 1.8); H.line(8, 2.8, 12.4, 7.2, 1.8) end,
+    hourglass = function(H)
+        H.line(4, 2.5, 12, 2.5, 1.6); H.line(4, 13.5, 12, 13.5, 1.6)
+        H.line(4.8, 3.4, 11.2, 12.6, 1.5); H.line(11.2, 3.4, 4.8, 12.6, 1.5)
+    end,
+    bolt = function(H) H.line(9.8, 1.5, 4.5, 8.8, 1.8); H.line(4.5, 8.8, 11.5, 8.8, 1.8); H.line(11.5, 8.8, 6.2, 14.5, 1.8) end,
+    checkc = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.line(5, 8.2, 7.1, 10.3, 1.5); H.line(7.1, 10.3, 11, 5.8, 1.5) end,
+    xc = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.line(5.6, 5.6, 10.4, 10.4, 1.5); H.line(10.4, 5.6, 5.6, 10.4, 1.5) end,
+    coin = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.line(8, 4.6, 8, 11.4, 1.6) end,
+}
+
+local function MakeIcon(parent, key, size, color)
+    if Icons[key] and Icons[key] ~= "" then
+        local img = Instance.new("ImageLabel")
+        img.Image = Icons[key]
+        img.ImageColor3 = color
+        img.BackgroundTransparency = 1
+        img.Size = UDim2.new(0, size, 0, size)
+        img.Parent = parent
+        return img
+    end
+
+    local root = Instance.new("Frame")
+    root.BackgroundTransparency = 1
+    root.BorderSizePixel = 0
+    root.Size = UDim2.new(0, size, 0, size)
+    local s = size / 16
+    local painters = {}
+
+    local function fill(f)
+        f.BorderSizePixel = 0
+        f.BackgroundColor3 = color
+        f.Parent = root
+        table.insert(painters, function(c) f.BackgroundColor3 = c end)
+    end
+
+    local H = {}
+    function H.line(x1, y1, x2, y2, th)
+        local dx, dy = x2 - x1, y2 - y1
+        local len = math.sqrt(dx * dx + dy * dy)
+        local f = Instance.new("Frame")
+        f.AnchorPoint = Vector2.new(0.5, 0.5)
+        f.Position = UDim2.new(0, (x1 + x2) / 2 * s, 0, (y1 + y2) / 2 * s)
+        f.Size = UDim2.new(0, (len + th) * s, 0, th * s)
+        f.Rotation = math.deg(math.atan2(dy, dx))
+        Instance.new("UICorner", f).CornerRadius = UDim.new(0.5, 0)
+        fill(f)
+    end
+    function H.rect(x, y, w, h, rnd)
+        local f = Instance.new("Frame")
+        f.Position = UDim2.new(0, x * s, 0, y * s)
+        f.Size = UDim2.new(0, w * s, 0, h * s)
+        Instance.new("UICorner", f).CornerRadius = UDim.new(rnd or 0, 0)
+        fill(f)
+    end
+    function H.dot(cx, cy, d)
+        local f = Instance.new("Frame")
+        f.AnchorPoint = Vector2.new(0.5, 0.5)
+        f.Position = UDim2.new(0, cx * s, 0, cy * s)
+        f.Size = UDim2.new(0, d * s, 0, d * s)
+        Instance.new("UICorner", f).CornerRadius = UDim.new(0.5, 0)
+        fill(f)
+    end
+    function H.ring(x, y, w, h, th, rnd)
+        local f = Instance.new("Frame")
+        f.BackgroundTransparency = 1
+        f.BorderSizePixel = 0
+        f.Position = UDim2.new(0, (x + th) * s, 0, (y + th) * s)
+        f.Size = UDim2.new(0, (w - 2 * th) * s, 0, (h - 2 * th) * s)
+        Instance.new("UICorner", f).CornerRadius = UDim.new(rnd or 0.5, 0)
+        local st = Instance.new("UIStroke", f)
+        st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        st.Thickness = math.max(1, th * s)
+        st.Color = color
+        f.Parent = root
+        table.insert(painters, function(c) st.Color = c end)
+    end
+
+    local draw = IconDefs[key]
+    if draw then draw(H) else H.dot(8, 8, 6) end
+    IconPaint[root] = function(c)
+        for _, p in ipairs(painters) do p(c) end
+    end
+    root.Parent = parent
+    return root
+end
+
+local function SetIconColor(ic, color)
+    local paint = IconPaint[ic]
+    if paint then paint(color)
+    elseif ic:IsA("ImageLabel") then ic.ImageColor3 = color end
+end
+
+local function NewLabel(parent, text, size, font, color, align)
+    local l = Instance.new("TextLabel")
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.TextSize = size
+    l.Font = font
+    l.TextColor3 = color
+    l.TextXAlignment = align or Enum.TextXAlignment.Left
+    l.Parent = parent
+    return l
+end
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "VZiir0HubGlass"
@@ -500,177 +677,290 @@ ScreenGui.Parent = CoreGui
 _G.BreakSteal_Hub_UI = ScreenGui
 
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 400, 0, 320) 
+MainFrame.Size = UDim2.new(0, 340, 0, 350) 
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.BackgroundColor3 = Colors.Background
-MainFrame.BackgroundTransparency = 0.1
+MainFrame.BackgroundTransparency = 0.05
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 16)
 local MainBorder = Instance.new("UIStroke", MainFrame)
+MainBorder.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 MainBorder.Color = Colors.Border
-MainBorder.Transparency = 0.85
+MainBorder.Thickness = 1
 
-local Sidebar = Instance.new("Frame", MainFrame)
-Sidebar.Size = UDim2.new(0, 100, 1, 0) 
-Sidebar.BackgroundColor3 = Colors.GlassPanel
-Sidebar.BackgroundTransparency = 0.3
-Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 12)
-
-local Title = Instance.new("TextLabel", Sidebar)
-Title.Size = UDim2.new(1, -10, 0, 35)
-Title.Position = UDim2.new(0, 5, 0, 5)
-Title.BackgroundTransparency = 1
-Title.Text = "V-Ziir0"
-Title.TextColor3 = Colors.Accent
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 14
-
-local MenuLayout = Instance.new("UIListLayout", Sidebar)
-MenuLayout.Padding = UDim.new(0, 4)
-MenuLayout.SortOrder = Enum.SortOrder.LayoutOrder
-MenuLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-
-local function CreateSidebarButton(name, layoutOrder)
-    local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(1, -10, 0, 30)
-    Btn.BackgroundColor3 = Colors.GlassPanel
-    Btn.BackgroundTransparency = 0.8
-    Btn.Text = ""
-    Btn.Parent = Sidebar
-    Btn.LayoutOrder = layoutOrder
-    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
-    local Txt = Instance.new("TextLabel", Btn)
-    Txt.Size = UDim2.new(1, -10, 1, 0)
-    Txt.Position = UDim2.new(0, 10, 0, 0)
-    Txt.BackgroundTransparency = 1
-    Txt.Text = name
-    Txt.TextColor3 = Colors.TextDim
-    Txt.Font = Enum.Font.GothamMedium
-    Txt.TextSize = 11
-    Txt.TextXAlignment = Enum.TextXAlignment.Left
-    Btn.MouseEnter:Connect(function()
-        if Txt.TextColor3 ~= Colors.Accent then
-            TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.5}):Play()
-            TweenService:Create(Txt, TweenInfo.new(0.2), {TextColor3 = Colors.Text}):Play()
-        end
-    end)
-    Btn.MouseLeave:Connect(function()
-        if Txt.TextColor3 ~= Colors.Accent then
-            TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.8}):Play()
-            TweenService:Create(Txt, TweenInfo.new(0.2), {TextColor3 = Colors.TextDim}):Play()
-        end
-    end)
-    local function SetActive(isActive)
-        if isActive then
-            TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.3, BackgroundColor3 = Colors.Accent}):Play()
-            Txt.TextColor3 = Colors.Background
-        else
-            TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.8, BackgroundColor3 = Colors.GlassPanel}):Play()
-            Txt.TextColor3 = Colors.TextDim
-        end
-    end
-    return Btn, SetActive
-end
-
-local HomeBtn, SetHomeActive = CreateSidebarButton("Home", 1)
-local AutoBuyBtn, SetAutoBuyActive = CreateSidebarButton("Auto Buy", 2)
-
+-- ── Header ──────────────────────────────────────────────
 local TopBar = Instance.new("Frame", MainFrame)
-TopBar.Size = UDim2.new(1, -100, 0, 30)
-TopBar.Position = UDim2.new(0, 100, 0, 0)
+TopBar.Size = UDim2.new(1, 0, 0, 34)
 TopBar.BackgroundTransparency = 1
 
+local LogoIcon = MakeIcon(TopBar, "pickaxe", 18, Colors.Accent)
+LogoIcon.Position = UDim2.new(0, 12, 0.5, -9)
+
+local Title = NewLabel(TopBar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
+Title.Size = UDim2.new(0, 56, 1, 0)
+Title.Position = UDim2.new(0, 36, 0, 0)
+
+local StatusPill = Instance.new("Frame", TopBar)
+StatusPill.Size = UDim2.new(0, 84, 0, 20)
+StatusPill.Position = UDim2.new(0, 98, 0.5, -10)
+StatusPill.BackgroundColor3 = Colors.GlassPanel
+Instance.new("UICorner", StatusPill).CornerRadius = UDim.new(1, 0)
+local PillDot = Instance.new("Frame", StatusPill)
+PillDot.Size = UDim2.new(0, 6, 0, 6)
+PillDot.Position = UDim2.new(0, 9, 0.5, -3)
+PillDot.BackgroundColor3 = Colors.TextDim
+Instance.new("UICorner", PillDot).CornerRadius = UDim.new(1, 0)
+local PillLbl = NewLabel(StatusPill, "Idle", 10, Enum.Font.GothamMedium, Colors.TextDim)
+PillLbl.Size = UDim2.new(1, -22, 1, 0)
+PillLbl.Position = UDim2.new(0, 20, 0, 0)
+
 local CloseBtn = Instance.new("TextButton", TopBar)
-CloseBtn.Size = UDim2.new(0, 25, 0, 25)
-CloseBtn.Position = UDim2.new(1, -30, 0, 3)
+CloseBtn.Size = UDim2.new(0, 26, 0, 26)
+CloseBtn.Position = UDim2.new(1, -32, 0, 4)
 CloseBtn.BackgroundTransparency = 1
-CloseBtn.Text = "✖"
-CloseBtn.TextColor3 = Colors.TextDim
+CloseBtn.Text = ""
+local CloseIcon = MakeIcon(CloseBtn, "close", 14, Colors.TextDim)
+CloseIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+CloseIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+CloseBtn.MouseEnter:Connect(function() SetIconColor(CloseIcon, Colors.Danger) end)
+CloseBtn.MouseLeave:Connect(function() SetIconColor(CloseIcon, Colors.TextDim) end)
 CloseBtn.MouseButton1Click:Connect(function() 
     _G.BreakSteal_Hub_Active = false
     ScreenGui:Destroy() 
 end)
 
 local MinBtn = Instance.new("TextButton", TopBar)
-MinBtn.Size = UDim2.new(0, 25, 0, 25)
-MinBtn.Position = UDim2.new(1, -55, 0, 3) 
+MinBtn.Size = UDim2.new(0, 26, 0, 26)
+MinBtn.Position = UDim2.new(1, -60, 0, 4) 
 MinBtn.BackgroundTransparency = 1
-MinBtn.Text = "—" 
-MinBtn.TextColor3 = Colors.TextDim
+MinBtn.Text = ""
+local MinIcon = MakeIcon(MinBtn, "minus", 14, Colors.TextDim)
+MinIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+MinIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+MinBtn.MouseEnter:Connect(function() SetIconColor(MinIcon, Colors.Text) end)
+MinBtn.MouseLeave:Connect(function() SetIconColor(MinIcon, Colors.TextDim) end)
+
+-- ── Tab bar (segmented) ─────────────────────────────────
+local TabBar = Instance.new("Frame", MainFrame)
+TabBar.Size = UDim2.new(1, -24, 0, 30)
+TabBar.Position = UDim2.new(0, 12, 0, 36)
+TabBar.BackgroundColor3 = Colors.GlassPanel
+Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 10)
+
+local function CreateTabButton(name, iconKey, xScale, xOffset)
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(0.5, -4, 1, -6)
+    Btn.Position = UDim2.new(xScale, xOffset, 0, 3)
+    Btn.BackgroundColor3 = Colors.Accent
+    Btn.BackgroundTransparency = 1
+    Btn.AutoButtonColor = false
+    Btn.Text = ""
+    Btn.Parent = TabBar
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 8)
+    local Row = Instance.new("Frame", Btn)
+    Row.Size = UDim2.new(1, 0, 1, 0)
+    Row.BackgroundTransparency = 1
+    local Lay = Instance.new("UIListLayout", Row)
+    Lay.FillDirection = Enum.FillDirection.Horizontal
+    Lay.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    Lay.VerticalAlignment = Enum.VerticalAlignment.Center
+    Lay.SortOrder = Enum.SortOrder.LayoutOrder
+    Lay.Padding = UDim.new(0, 6)
+    local Ic = MakeIcon(Row, iconKey, 14, Colors.TextDim)
+    Ic.LayoutOrder = 1
+    local Txt = NewLabel(Row, name, 12, Enum.Font.GothamMedium, Colors.TextDim)
+    Txt.AutomaticSize = Enum.AutomaticSize.X
+    Txt.Size = UDim2.new(0, 0, 1, 0)
+    Txt.LayoutOrder = 2
+    local active = false
+    Btn.MouseEnter:Connect(function() if not active then Txt.TextColor3 = Colors.Text end end)
+    Btn.MouseLeave:Connect(function() if not active then Txt.TextColor3 = Colors.TextDim end end)
+    local function SetActive(isActive)
+        active = isActive
+        TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = isActive and 0 or 1}):Play()
+        Txt.TextColor3 = isActive and Colors.OnAccent or Colors.TextDim
+        SetIconColor(Ic, isActive and Colors.OnAccent or Colors.TextDim)
+    end
+    return Btn, SetActive
+end
+
+local HomeBtn, SetHomeActive = CreateTabButton("Monitor", "monitor", 0, 2)
+local AutoBuyBtn, SetAutoBuyActive = CreateTabButton("Auto Buy", "shop", 0.5, 2)
 
 local ContentArea = Instance.new("Frame", MainFrame)
-ContentArea.Size = UDim2.new(1, -110, 1, -40)
-ContentArea.Position = UDim2.new(0, 105, 0, 35)
-ContentArea.BackgroundColor3 = Colors.GlassPanel
-ContentArea.BackgroundTransparency = 0.3
-Instance.new("UICorner", ContentArea).CornerRadius = UDim.new(0, 10)
+ContentArea.Size = UDim2.new(1, -24, 1, -118)
+ContentArea.Position = UDim2.new(0, 12, 0, 74)
+ContentArea.BackgroundTransparency = 1
 
-local function CreateSwitchToggle(parent, name, layoutOrder, defaultState)
-    local Frame = Instance.new("Frame", parent)
-    Frame.Size = UDim2.new(1, 0, 0, 35)
-    Frame.BackgroundTransparency = 1
-    Frame.LayoutOrder = layoutOrder
-    local Label = Instance.new("TextLabel", Frame)
-    Label.Size = UDim2.new(1, -50, 1, 0)
-    Label.BackgroundTransparency = 1
-    Label.Text = name
-    Label.TextColor3 = Colors.Text
-    Label.Font = Enum.Font.GothamMedium
-    Label.TextSize = 12
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    local SwitchBg = Instance.new("Frame", Frame)
-    SwitchBg.Size = UDim2.new(0, 36, 0, 18)
-    SwitchBg.Position = UDim2.new(1, -36, 0.5, -9)
-    SwitchBg.BackgroundColor3 = defaultState and Colors.Accent or Colors.SwitchOff
-    Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
-    local Knob = Instance.new("Frame", SwitchBg)
-    Knob.Size = UDim2.new(0, 14, 0, 14)
-    Knob.Position = defaultState and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
-    Knob.BackgroundColor3 = Colors.Text
-    Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
+-- ── Chip toggle (pengganti switch) ──────────────────────
+local function CreateChipToggle(parent, text, iconKey, layoutOrder, defaultState)
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(0, 101, 1, 0)
+    Btn.BackgroundColor3 = Colors.GlassPanel
+    Btn.AutoButtonColor = false
+    Btn.Text = ""
+    Btn.LayoutOrder = layoutOrder
+    Btn.Parent = parent
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 10)
+    local Stroke = Instance.new("UIStroke", Btn)
+    Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    Stroke.Thickness = 1
+    Stroke.Color = Colors.Border
+    local Ic = MakeIcon(Btn, iconKey, 16, Colors.TextDim)
+    Ic.Position = UDim2.new(0, 8, 0.5, -8)
+    local Lbl = NewLabel(Btn, text, 11, Enum.Font.GothamMedium, Colors.TextDim)
+    Lbl.Size = UDim2.new(1, -30, 1, 0)
+    Lbl.Position = UDim2.new(0, 28, 0, 0)
+    Lbl.TextTruncate = Enum.TextTruncate.AtEnd
     local isOn = defaultState
-    local function updateVisual(state)
-        isOn = state
-        if isOn then
-            TweenService:Create(SwitchBg, TweenInfo.new(0.2), {BackgroundColor3 = Colors.Accent}):Play()
-            TweenService:Create(Knob, TweenInfo.new(0.2), {Position = UDim2.new(1, -16, 0.5, -7)}):Play() 
-        else
-            TweenService:Create(SwitchBg, TweenInfo.new(0.2), {BackgroundColor3 = Colors.SwitchOff}):Play()
-            TweenService:Create(Knob, TweenInfo.new(0.2), {Position = UDim2.new(0, 2, 0.5, -7)}):Play()
-        end
+    local function paint()
+        local info = TweenInfo.new(0.2)
+        TweenService:Create(Btn, info, {BackgroundColor3 = isOn and Colors.ChipOn or Colors.GlassPanel}):Play()
+        TweenService:Create(Stroke, info, {Color = isOn and Colors.Accent or Colors.Border}):Play()
+        TweenService:Create(Lbl, info, {TextColor3 = isOn and Colors.Accent or Colors.TextDim}):Play()
+        SetIconColor(Ic, isOn and Colors.Accent or Colors.TextDim)
     end
+    paint()
+    Btn.MouseEnter:Connect(function()
+        if not isOn then TweenService:Create(Btn, TweenInfo.new(0.15), {BackgroundColor3 = Colors.SwitchOff}):Play() end
+    end)
+    Btn.MouseLeave:Connect(function()
+        if not isOn then TweenService:Create(Btn, TweenInfo.new(0.15), {BackgroundColor3 = Colors.GlassPanel}):Play() end
+    end)
     return {
-        SetState = function(state) updateVisual(state) end,
+        SetState = function(state) isOn = state; paint() end,
         GetState = function() return isOn end,
-        SwitchBg = SwitchBg,
+        SwitchBg = Btn,
     }
 end
 
-local HomeTab = Instance.new("ScrollingFrame", ContentArea)
-HomeTab.Size = UDim2.new(1, -10, 1, -10)
-HomeTab.Position = UDim2.new(0, 5, 0, 5)
+-- ── TAB MONITOR ─────────────────────────────────────────
+local HomeTab = Instance.new("Frame", ContentArea)
+HomeTab.Size = UDim2.new(1, 0, 1, 0)
 HomeTab.BackgroundTransparency = 1
-HomeTab.ScrollBarThickness = 2
-local HomeLayout = Instance.new("UIListLayout", HomeTab)
-HomeLayout.Padding = UDim.new(0, 6)
 
-local HomeTitle = Instance.new("TextLabel", HomeTab)
-HomeTitle.Size = UDim2.new(1, 0, 0, 20)
-HomeTitle.BackgroundTransparency = 1
-HomeTitle.Text = "Target Monitor & Auto Jump"
-HomeTitle.TextColor3 = Colors.Text
-HomeTitle.Font = Enum.Font.GothamBold
-HomeTitle.TextSize = 12
-HomeTitle.TextXAlignment = Enum.TextXAlignment.Left
+-- Langkah: Income > Speed > Kapak
+local StepsRow = Instance.new("Frame", HomeTab)
+StepsRow.Size = UDim2.new(1, 0, 0, 24)
+StepsRow.BackgroundTransparency = 1
+local StepsLayout = Instance.new("UIListLayout", StepsRow)
+StepsLayout.FillDirection = Enum.FillDirection.Horizontal
+StepsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+StepsLayout.Padding = UDim.new(0, 6)
+
+local StepNames = { "Income", "Speed", "Kapak" }
+local StepIconKeys = { "coin", "bolt", "pickaxe" }
+local StepPills = {}
+for i, nm in ipairs(StepNames) do
+    local P = Instance.new("Frame")
+    P.Size = UDim2.new(0, 101, 1, 0)
+    P.BackgroundColor3 = Colors.GlassPanel
+    P.LayoutOrder = i
+    P.Parent = StepsRow
+    Instance.new("UICorner", P).CornerRadius = UDim.new(0, 8)
+    local Row = Instance.new("Frame", P)
+    Row.Size = UDim2.new(1, 0, 1, 0)
+    Row.BackgroundTransparency = 1
+    local Lay = Instance.new("UIListLayout", Row)
+    Lay.FillDirection = Enum.FillDirection.Horizontal
+    Lay.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    Lay.VerticalAlignment = Enum.VerticalAlignment.Center
+    Lay.SortOrder = Enum.SortOrder.LayoutOrder
+    Lay.Padding = UDim.new(0, 5)
+    local Ic = MakeIcon(Row, StepIconKeys[i], 12, Colors.TextDim)
+    Ic.LayoutOrder = 1
+    local Ck = MakeIcon(Row, "check", 12, Colors.Green)
+    Ck.LayoutOrder = 1
+    Ck.Visible = false
+    local L = NewLabel(Row, nm, 10, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
+    L.AutomaticSize = Enum.AutomaticSize.X
+    L.Size = UDim2.new(0, 0, 1, 0)
+    L.LayoutOrder = 2
+    StepPills[i] = { Frame = P, Label = L, Icon = Ic, Check = Ck }
+end
+
+-- Ring progress (dua setengah lingkaran + UIGradient pada UIStroke)
+local RING_SIZE, RING_T = 108, 9
+local RingHolder = Instance.new("Frame", HomeTab)
+RingHolder.Size = UDim2.new(0, RING_SIZE, 0, RING_SIZE)
+RingHolder.Position = UDim2.new(0.5, -RING_SIZE / 2, 0, 30)
+RingHolder.BackgroundTransparency = 1
+
+local Track = Instance.new("Frame", RingHolder)
+Track.Size = UDim2.new(1, -RING_T * 2, 1, -RING_T * 2)
+Track.Position = UDim2.new(0, RING_T, 0, RING_T)
+Track.BackgroundTransparency = 1
+Instance.new("UICorner", Track).CornerRadius = UDim.new(1, 0)
+local TrackStroke = Instance.new("UIStroke", Track)
+TrackStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+TrackStroke.Thickness = RING_T
+TrackStroke.Color = Colors.Track
+
+local function MakeHalf(isRight)
+    local Clip = Instance.new("Frame", RingHolder)
+    Clip.Size = UDim2.new(0.5, 0, 1, 0)
+    Clip.Position = isRight and UDim2.new(0.5, 0, 0, 0) or UDim2.new(0, 0, 0, 0)
+    Clip.BackgroundTransparency = 1
+    Clip.ClipsDescendants = true
+    local Circ = Instance.new("Frame", Clip)
+    Circ.Size = UDim2.new(2, -RING_T * 2, 1, -RING_T * 2)
+    Circ.Position = isRight and UDim2.new(-1, RING_T, 0, RING_T) or UDim2.new(0, RING_T, 0, RING_T)
+    Circ.BackgroundTransparency = 1
+    Instance.new("UICorner", Circ).CornerRadius = UDim.new(1, 0)
+    local St = Instance.new("UIStroke", Circ)
+    St.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    St.Thickness = RING_T
+    St.Color = Colors.Accent
+    local Gr = Instance.new("UIGradient", St)
+    Gr.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0),
+        NumberSequenceKeypoint.new(0.5, 0),
+        NumberSequenceKeypoint.new(0.501, 1),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    return Gr, St
+end
+local RightGrad, RightStroke = MakeHalf(true)
+local LeftGrad, LeftStroke = MakeHalf(false)
+
+local function SetRing(p)
+    local angle = math.clamp(p, 0, 1) * 360
+    RightGrad.Rotation = math.clamp(angle, 0, 180)
+    LeftGrad.Rotation = math.clamp(angle - 180, 0, 180) - 180
+end
+SetRing(0)
+
+local PercentLbl = NewLabel(RingHolder, "—", 22, Enum.Font.GothamBold, Colors.Text, Enum.TextXAlignment.Center)
+PercentLbl.Size = UDim2.new(1, 0, 0, 26)
+PercentLbl.Position = UDim2.new(0, 0, 0.5, -20)
+PercentLbl.ZIndex = 5
+local SubLbl = NewLabel(RingHolder, "Idle", 11, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
+SubLbl.Size = UDim2.new(1, 0, 0, 14)
+SubLbl.Position = UDim2.new(0, 0, 0.5, 6)
+SubLbl.ZIndex = 5
+
+local CaptionLbl = NewLabel(HomeTab, "Aktifkan target di bawah", 12, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
+CaptionLbl.Size = UDim2.new(1, 0, 0, 18)
+CaptionLbl.Position = UDim2.new(0, 0, 0, 142)
+
+-- Chip: target monitor + auto jump
+local ChipsRow = Instance.new("Frame", HomeTab)
+ChipsRow.Size = UDim2.new(1, 0, 0, 32)
+ChipsRow.Position = UDim2.new(0, 0, 0, 166)
+ChipsRow.BackgroundTransparency = 1
+local ChipsLayout = Instance.new("UIListLayout", ChipsRow)
+ChipsLayout.FillDirection = Enum.FillDirection.Horizontal
+ChipsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ChipsLayout.Padding = UDim.new(0, 6)
 
 local monitorToggles = {}
 local toggleCallbacks = {}
 
 for i, cfg in ipairs(CONFIG_DB) do
-    local toggleObj = CreateSwitchToggle(HomeTab, cfg.name, i, false)
+    local toggleObj = CreateChipToggle(ChipsRow, UI_SHORT[cfg.name] or cfg.name, (cfg.amount >= 2e12) and "crown" or "target", i, false)
     local function callbackFn(state)
         if state then
             for _, other in pairs(monitorToggles) do
@@ -709,88 +999,139 @@ for i, cfg in ipairs(CONFIG_DB) do
     end
     toggleCallbacks[i] = callbackFn
     table.insert(monitorToggles, toggleObj)
-    local switchBg = toggleObj.SwitchBg
-    switchBg.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            if toggleObj.GetState() then
-                toggleObj.SetState(false)
-                callbackFn(false)
-            else
-                toggleObj.SetState(true)
-                callbackFn(true)
-            end
+    toggleObj.SwitchBg.MouseButton1Click:Connect(function()
+        if toggleObj.GetState() then
+            toggleObj.SetState(false)
+            callbackFn(false)
+        else
+            toggleObj.SetState(true)
+            callbackFn(true)
         end
     end)
 end
 
-local autoJumpToggle = CreateSwitchToggle(HomeTab, "Auto Jump (Anti Stuck)", 10, false)
-autoJumpToggle.SwitchBg.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        local newState = not autoJumpToggle.GetState()
-        autoJumpToggle.SetState(newState)
-        isAutoJumpEnabled = newState
-    end
+local autoJumpToggle = CreateChipToggle(ChipsRow, "Auto Jump", "jump", 10, false)
+autoJumpToggle.SwitchBg.MouseButton1Click:Connect(function()
+    local newState = not autoJumpToggle.GetState()
+    autoJumpToggle.SetState(newState)
+    isAutoJumpEnabled = newState
 end)
 
-local StatusLbl = Instance.new("TextLabel", MainFrame)
-StatusLbl.Size = UDim2.new(1, 0, 0, 15)
-StatusLbl.Position = UDim2.new(0, 0, 1, -30)
-StatusLbl.BackgroundTransparency = 1
-StatusLbl.Text = "Status: Pilih target monitor."
-StatusLbl.TextColor3 = Colors.TextDim
-StatusLbl.TextSize = 10
-StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+-- Label status (ditulis oleh LOOP UTAMA, nama variabel tetap)
+local StatusLbl = NewLabel(HomeTab, "Status: Pilih target monitor.", 10, Enum.Font.Gotham, Colors.TextDim, Enum.TextXAlignment.Center)
+StatusLbl.Size = UDim2.new(1, 0, 0, 16)
+StatusLbl.Position = UDim2.new(0, 0, 0, 204)
+StatusLbl.TextTruncate = Enum.TextTruncate.AtEnd
 
-local BuyStatusLbl = Instance.new("TextLabel", MainFrame)
-BuyStatusLbl.Size = UDim2.new(1, 0, 0, 15)
-BuyStatusLbl.Position = UDim2.new(0, 0, 1, -15)
-BuyStatusLbl.BackgroundTransparency = 1
-BuyStatusLbl.Text = "Status: Idle"
-BuyStatusLbl.TextColor3 = Colors.TextDim
-BuyStatusLbl.Font = Enum.Font.GothamBold
-BuyStatusLbl.TextSize = 10
-BuyStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+-- ── Footer: status auto buy (ditulis oleh LOOP UTAMA, nama variabel tetap) ──
+local FooterBar = Instance.new("Frame", MainFrame)
+FooterBar.Size = UDim2.new(1, -16, 0, 28)
+FooterBar.Position = UDim2.new(0, 8, 1, -36)
+FooterBar.BackgroundColor3 = Colors.GlassPanel
+Instance.new("UICorner", FooterBar).CornerRadius = UDim.new(0, 8)
 
-local AutoBuyTab = Instance.new("ScrollingFrame", ContentArea)
-AutoBuyTab.Size = UDim2.new(1, -10, 1, -10)
-AutoBuyTab.Position = UDim2.new(0, 5, 0, 5)
+-- BuyStatusLbl tetap ditulis oleh LOOP UTAMA (teks asli dari logika ber-emoji). Label ini disembunyikan,
+-- isinya DICERMINKAN ke BuyDisplayLbl tanpa emoji, lengkap dengan ikon di sebelah kirinya.
+local BuyStatusLbl = NewLabel(FooterBar, "Status: Idle", 11, Enum.Font.GothamBold, Colors.TextDim)
+BuyStatusLbl.Size = UDim2.new(1, -16, 1, 0)
+BuyStatusLbl.Position = UDim2.new(0, 8, 0, 0)
+BuyStatusLbl.TextTruncate = Enum.TextTruncate.AtEnd
+BuyStatusLbl.Visible = false
+
+local BuyIcons = {}
+for _, k in ipairs({ "shop", "hourglass", "bolt", "checkc", "xc" }) do
+    local ic = MakeIcon(FooterBar, k, 14, Colors.TextDim)
+    ic.Position = UDim2.new(0, 9, 0.5, -7)
+    ic.Visible = false
+    BuyIcons[k] = ic
+end
+local BuyDisplayLbl = NewLabel(FooterBar, "Status: Idle", 11, Enum.Font.GothamBold, Colors.TextDim)
+BuyDisplayLbl.Size = UDim2.new(1, -34, 1, 0)
+BuyDisplayLbl.Position = UDim2.new(0, 28, 0, 0)
+BuyDisplayLbl.TextTruncate = Enum.TextTruncate.AtEnd
+
+local function SyncBuyStatus()
+    local raw = BuyStatusLbl.Text
+    local key = "shop"
+    if raw:find("⏳", 1, true) then key = "hourglass"
+    elseif raw:find("⚡", 1, true) then key = "bolt"
+    elseif raw:find("✅", 1, true) then key = "checkc"
+    elseif raw:find("❌", 1, true) then key = "xc" end
+    for k, ic in pairs(BuyIcons) do ic.Visible = (k == key) end
+    SetIconColor(BuyIcons[key], BuyStatusLbl.TextColor3)
+    BuyDisplayLbl.Text = StripEmoji(raw)
+    BuyDisplayLbl.TextColor3 = BuyStatusLbl.TextColor3
+end
+BuyStatusLbl:GetPropertyChangedSignal("Text"):Connect(SyncBuyStatus)
+BuyStatusLbl:GetPropertyChangedSignal("TextColor3"):Connect(SyncBuyStatus)
+SyncBuyStatus()
+
+-- ── TAB AUTO BUY ────────────────────────────────────────
+local AutoBuyTab = Instance.new("Frame", ContentArea)
+AutoBuyTab.Size = UDim2.new(1, 0, 1, 0)
 AutoBuyTab.BackgroundTransparency = 1
-AutoBuyTab.ScrollBarThickness = 2
 AutoBuyTab.Visible = false
-local AutoBuyLayout = Instance.new("UIListLayout", AutoBuyTab)
-AutoBuyLayout.Padding = UDim.new(0, 6)
 
-local DropdownBtn = Instance.new("TextButton", AutoBuyTab)
-DropdownBtn.Size = UDim2.new(1, 0, 0, 30)
-DropdownBtn.BackgroundColor3 = Colors.GlassPanel
-DropdownBtn.BackgroundTransparency = 0.5
-DropdownBtn.LayoutOrder = 2
-DropdownBtn.Text = "▼ Pilih Kapak"
-DropdownBtn.TextColor3 = Colors.Text
-DropdownBtn.Font = Enum.Font.GothamBold
-DropdownBtn.TextSize = 12
-Instance.new("UICorner", DropdownBtn).CornerRadius = UDim.new(0, 6)
+local SelectedCard = Instance.new("Frame", AutoBuyTab)
+SelectedCard.Size = UDim2.new(1, 0, 0, 38)
+SelectedCard.BackgroundColor3 = Colors.GlassPanel
+Instance.new("UICorner", SelectedCard).CornerRadius = UDim.new(0, 10)
+local SelCap = NewLabel(SelectedCard, "Kapak target", 10, Enum.Font.Gotham, Colors.TextDim)
+SelCap.Size = UDim2.new(1, -20, 0, 14)
+SelCap.Position = UDim2.new(0, 10, 0, 5)
+local SelValue = NewLabel(SelectedCard, "Belum dipilih", 12, Enum.Font.GothamBold, Colors.Text)
+SelValue.Size = UDim2.new(1, -20, 0, 16)
+SelValue.Position = UDim2.new(0, 10, 0, 18)
 
-local DropdownList = Instance.new("Frame", AutoBuyTab)
-DropdownList.Size = UDim2.new(1, 0, 0, 0) 
-DropdownList.BackgroundTransparency = 1
-DropdownList.LayoutOrder = 3
-DropdownList.ClipsDescendants = true
-local ListLayout = Instance.new("UIListLayout", DropdownList)
-ListLayout.Padding = UDim.new(0, 2)
+local PickList = Instance.new("ScrollingFrame", AutoBuyTab)
+PickList.Size = UDim2.new(1, 0, 1, -44)
+PickList.Position = UDim2.new(0, 0, 0, 44)
+PickList.BackgroundTransparency = 1
+PickList.BorderSizePixel = 0
+PickList.ScrollBarThickness = 3
+PickList.ScrollBarImageColor3 = Colors.Accent
+PickList.CanvasSize = UDim2.new(0, 0, 0, 0)
+PickList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+local PickLayout = Instance.new("UIListLayout", PickList)
+PickLayout.Padding = UDim.new(0, 4)
+PickLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
-local isDropdownOpen = false
+local PickRows = {}
+local function PaintPickaxeRows()
+    for _, r in ipairs(PickRows) do
+        local sel = autoBuyEnabled and targetPickaxeName == r.name
+        r.Btn.BackgroundColor3 = sel and Colors.ChipOn or Colors.GlassPanel
+        r.Stroke.Color = sel and Colors.Accent or Colors.Border
+        r.NameLbl.TextColor3 = sel and Colors.Accent or Colors.Text
+    end
+end
+
 for i, pk in ipairs(PICKAXE_DB) do
-    local OptionBtn = Instance.new("TextButton", DropdownList)
-    OptionBtn.Size = UDim2.new(1, -5, 0, 25)
+    local OptionBtn = Instance.new("TextButton")
+    OptionBtn.Size = UDim2.new(1, -8, 0, 30)
     OptionBtn.BackgroundColor3 = Colors.GlassPanel
-    OptionBtn.BackgroundTransparency = 0.7
+    OptionBtn.AutoButtonColor = false
     OptionBtn.LayoutOrder = i
-    OptionBtn.Text = pk.name .. " (" .. pk.priceStr .. ")"
-    OptionBtn.TextColor3 = Colors.Text
-    OptionBtn.Font = Enum.Font.Gotham
-    OptionBtn.TextSize = 10
-    Instance.new("UICorner", OptionBtn).CornerRadius = UDim.new(0, 4)
+    OptionBtn.Text = ""
+    OptionBtn.Parent = PickList
+    Instance.new("UICorner", OptionBtn).CornerRadius = UDim.new(0, 8)
+    local RowStroke = Instance.new("UIStroke", OptionBtn)
+    RowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    RowStroke.Thickness = 1
+    RowStroke.Color = Colors.Border
+    local NameLbl = NewLabel(OptionBtn, pk.name, 12, Enum.Font.GothamMedium, Colors.Text)
+    NameLbl.Size = UDim2.new(0.55, 0, 1, 0)
+    NameLbl.Position = UDim2.new(0, 10, 0, 0)
+    local PriceLbl = NewLabel(OptionBtn, pk.priceStr, 11, Enum.Font.Gotham, Colors.Amber, Enum.TextXAlignment.Right)
+    PriceLbl.Size = UDim2.new(0.4, 0, 1, 0)
+    PriceLbl.Position = UDim2.new(0.6, -10, 0, 0)
+    table.insert(PickRows, { name = pk.name, Btn = OptionBtn, Stroke = RowStroke, NameLbl = NameLbl })
+    OptionBtn.MouseEnter:Connect(function()
+        if not (autoBuyEnabled and targetPickaxeName == pk.name) then OptionBtn.BackgroundColor3 = Colors.SwitchOff end
+    end)
+    OptionBtn.MouseLeave:Connect(function()
+        if not (autoBuyEnabled and targetPickaxeName == pk.name) then OptionBtn.BackgroundColor3 = Colors.GlassPanel end
+    end)
     OptionBtn.MouseButton1Click:Connect(function()
         targetPickaxeName = pk.name
         targetPickaxeId = pk.id
@@ -798,24 +1139,12 @@ for i, pk in ipairs(PICKAXE_DB) do
         autoBuyEnabled = true
         hasCheckedOwnership = false
         buyStatus = "Siap beli (ID: "..pk.id..")"
-        DropdownList.Size = UDim2.new(1, 0, 0, 0)
-        isDropdownOpen = false
-        DropdownBtn.Text = "▼ Pilih Kapak"
         showNotif("🛒 AUTO BUY AKTIF", "Menunggu uang cukup untuk " .. pk.name, 5)
+        PaintPickaxeRows()
     end)
 end
 
-DropdownBtn.MouseButton1Click:Connect(function()
-    isDropdownOpen = not isDropdownOpen
-    if isDropdownOpen then
-        DropdownList.Size = UDim2.new(1, 0, 0, #PICKAXE_DB * 27)
-        DropdownBtn.Text = "▲ Tutup Pilihan"
-    else
-        DropdownList.Size = UDim2.new(1, 0, 0, 0)
-        DropdownBtn.Text = "▼ Pilih Kapak"
-    end
-end)
-
+-- ── Navigasi tab ────────────────────────────────────────
 HomeBtn.MouseButton1Click:Connect(function() 
     SetHomeActive(true); SetAutoBuyActive(false)
     HomeTab.Visible = true; AutoBuyTab.Visible = false
@@ -826,6 +1155,7 @@ AutoBuyBtn.MouseButton1Click:Connect(function()
 end)
 SetHomeActive(true)
 
+-- ── Tombol mengambang (tidak diubah) ────────────────────
 local FloatingBtn = Instance.new("ImageButton", ScreenGui)
 FloatingBtn.Size = UDim2.new(0, 50, 0, 50)
 FloatingBtn.Position = UDim2.new(0, 20, 0, 20) 
@@ -864,6 +1194,108 @@ FloatingBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
 end)
 MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
+
+-- ═══════════ [ PENYEGAR TAMPILAN (BACA-SAJA) ] ═══════════
+-- Fase ring: Income > Speed > Kapak (Galaxy dulu kalau belum punya) > Selesai.
+-- Hanya MEMBACA variabel/fungsi yang sudah ada, tidak mengubah state apa pun.
+local ProgressValue = Instance.new("NumberValue")
+local idleMode = true
+ProgressValue.Changed:Connect(function(p)
+    SetRing(p)
+    if not idleMode then PercentLbl.Text = math.floor(p * 100 + 0.0001) .. "%" end
+end)
+local function SetProgress(p)
+    TweenService:Create(ProgressValue, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Value = p}):Play()
+end
+
+local function pctOf(cur, tgt)
+    if tgt and tgt > 0 then return math.clamp(cur / tgt, 0, 1) end
+    return 0
+end
+
+local function computeView()
+    local idle = { idx = 0, idle = true, color = Colors.TextDim, sub = "Idle", pct = 0, caption = "Aktifkan target di bawah" }
+    if not is_monitoring and not autoBuyEnabled then return idle end
+
+    local function pickaxeView(idx)
+        local cash = getRealCash()
+        local name, price
+        if not hasCheckedOwnership then name, price = prereqName, prereqPrice else name, price = targetPickaxeName, targetBuyPrice end
+        return { idx = idx, color = Colors.Amber, sub = name, pct = pctOf(cash, price), caption = formatNumber(cash) .. " / " .. formatNumber(price) }
+    end
+
+    if not is_monitoring then return pickaxeView(0) end
+
+    local money_str, speed_str = getMyData()
+    local money_num, speed_num = parseNumber(money_str), parseNumber(speed_str)
+    local incomeOK = is_income_done or (targetIncome > 0 and money_num >= targetIncome)
+    local speedOK = is_speed_done or (targetSpeedValue > 0 and speed_num >= targetSpeedValue)
+
+    if not incomeOK then
+        return { idx = 1, color = Colors.Accent, sub = "Income", pct = pctOf(money_num, targetIncome), caption = formatNumber(money_num) .. " / " .. formatNumber(targetIncome) }
+    elseif not speedOK then
+        return { idx = 2, color = Colors.Green, sub = "Speed", pct = pctOf(speed_num, targetSpeedValue), caption = formatNumber(speed_num) .. " / " .. formatNumber(targetSpeedValue) }
+    elseif autoBuyEnabled then
+        return pickaxeView(3)
+    else
+        local owned = buyStatus:find("DIMILIKI") or buyStatus:find("Beli Sukses")
+        return { idx = 4, color = Colors.Green, sub = "Selesai", pct = 1, caption = owned and ("Kapak " .. tostring(targetPickaxeName) .. " dimiliki") or "Target tercapai" }
+    end
+end
+
+local function ApplyView(v)
+    idleMode = v.idle == true
+    RightStroke.Color = v.color
+    LeftStroke.Color = v.color
+    SetProgress(v.pct)
+    if idleMode then PercentLbl.Text = "—" end
+    SubLbl.Text = v.sub
+    SubLbl.TextColor3 = v.color
+    CaptionLbl.Text = v.caption
+
+    for i, pill in ipairs(StepPills) do
+        local done = (v.idx == 4 or v.idx > i)
+        pill.Icon.Visible = not done
+        pill.Check.Visible = done
+        if done then
+            pill.Frame.BackgroundColor3 = Colors.GlassPanel
+            pill.Label.TextColor3 = Colors.Green
+        elseif v.idx == i then
+            pill.Frame.BackgroundColor3 = Colors.ChipOn
+            pill.Label.TextColor3 = v.color
+            SetIconColor(pill.Icon, v.color)
+        else
+            pill.Frame.BackgroundColor3 = Colors.GlassPanel
+            pill.Label.TextColor3 = Colors.TextDim
+            SetIconColor(pill.Icon, Colors.TextDim)
+        end
+    end
+
+    if is_monitoring then
+        PillLbl.Text = "Memantau"
+        PillLbl.TextColor3 = Colors.Green
+        PillDot.BackgroundColor3 = Colors.Green
+    elseif autoBuyEnabled then
+        PillLbl.Text = "Auto Buy"
+        PillLbl.TextColor3 = Colors.Amber
+        PillDot.BackgroundColor3 = Colors.Amber
+    else
+        PillLbl.Text = "Idle"
+        PillLbl.TextColor3 = Colors.TextDim
+        PillDot.BackgroundColor3 = Colors.TextDim
+    end
+
+    SelValue.Text = autoBuyEnabled and (tostring(targetPickaxeName) .. "  •  " .. formatNumber(targetBuyPrice)) or "Belum dipilih"
+    PaintPickaxeRows()
+end
+
+task.spawn(function()
+    while ScreenGui.Parent do
+        local ok, v = pcall(computeView)
+        if ok and v then pcall(ApplyView, v) end
+        task.wait(INTERVAL)
+    end
+end)
 
 -- ═══════════ [ LOOP UTAMA ] ═══════════
 task.spawn(function()
