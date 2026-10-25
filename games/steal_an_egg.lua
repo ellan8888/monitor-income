@@ -1,9 +1,12 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg (v39 - Phase Ring + Egg Backpack)
--- CATATAN: Hanya bagian "UI CUSTOM" dan "PENYEGAR TAMPILAN" yang diganti.
--- Semua logika (config, BigFroot, Nasi Rendang, sniper, hop, webhook, auto load)
--- sama persis dengan v38 FINAL.
+-- 🥚 V-Ziir0 Hub: Steal An Egg (v40 - Auto Resume After Hop)
+-- v40: setelah server hop, script otomatis jalan lagi dan MELANJUTKAN monitor
+--      beserta daftar target dari server sebelumnya (config dibaca dari file).
+-- UI sama dengan v39. Logika sniper/auto place/webhook tidak diubah.
 -- ═══════════════════════════════════════════════════════
+
+-- ⭐ TUNGGU GAME SIAP (penting saat dijalankan otomatis setelah teleport)
+if not game:IsLoaded() then game.Loaded:Wait() end
 
 -- ⭐ SISTEM ANTI-DOUBLE
 if _G.StealEgg_Hub_Active then
@@ -17,6 +20,9 @@ end
 _G.StealEgg_Hub_Active = true
 _G.StealEgg_Hub_UI = nil
 _G.StealEgg_LoopBroken = false
+-- ID unik per eksekusi: loop dari eksekusi lama otomatis berhenti kalau ada eksekusi baru
+local RUN_ID = tostring(os.clock()) .. "-" .. tostring(math.random(1, 1000000000))
+_G.StealEgg_RunId = RUN_ID
 
 local player = game.Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
@@ -65,6 +71,7 @@ local webhookStatusText = "+ FARMING ACTIVE"
 -- ═══════════ [ FUNGSI SAVE/LOAD CONFIG ] ═══════════
 local function saveConfig()
     _G.StealEgg_Config = config
+    pcall(function() getgenv().__VZ_StealEgg_Config = config end)
     if writefile then
         pcall(function()
             local json = HttpService:JSONEncode(config)
@@ -73,26 +80,35 @@ local function saveConfig()
     end
 end
 
-local function loadConfig()
-    if _G.StealEgg_Config and _G.StealEgg_Config.MonitorEnabled ~= nil then
-        for k, v in pairs(_G.StealEgg_Config) do
-            config[k] = v
-        end
-        is_monitoring = config.MonitorEnabled
-        return true
+local function applyLoadedConfig(data)
+    for k, v in pairs(data) do
+        config[k] = v
     end
+    is_monitoring = config.MonitorEnabled
+end
+
+local function loadConfig()
+    -- 1) File di workspace executor = sumber utama (tetap ada setelah teleport / server hop)
     if readfile and isfile and isfile("vziir0_egg_config.json") then
         local ok, content = pcall(function() return readfile("vziir0_egg_config.json") end)
         if ok and content and content ~= "" then
             local ok2, data = pcall(function() return HttpService:JSONDecode(content) end)
-            if ok2 and data then
-                for k, v in pairs(data) do
-                    config[k] = v
-                end
-                is_monitoring = config.MonitorEnabled
+            if ok2 and type(data) == "table" and data.MonitorEnabled ~= nil then
+                applyLoadedConfig(data)
                 return true
             end
         end
+    end
+    -- 2) Cadangan: getgenv (di sebagian executor tetap hidup setelah teleport)
+    local okG, g = pcall(function() return getgenv().__VZ_StealEgg_Config end)
+    if okG and type(g) == "table" and g.MonitorEnabled ~= nil then
+        applyLoadedConfig(g)
+        return true
+    end
+    -- 3) Sesi yang sama (script dijalankan ulang tanpa teleport)
+    if _G.StealEgg_Config and _G.StealEgg_Config.MonitorEnabled ~= nil then
+        applyLoadedConfig(_G.StealEgg_Config)
+        return true
     end
     return false
 end
@@ -100,6 +116,24 @@ end
 loadConfig()
 config.DetectedTargets = config.DetectedTargets or {}
 config.OriginalTargets = config.OriginalTargets or {}
+
+-- ═══════════ [ AUTO EXECUTE SETELAH TELEPORT ] ═══════════
+-- Hanya mendaftar SATU kali per sesi supaya tidak jalan dobel setelah teleport.
+local reExecQueued = false
+local function queueReExecute()
+    if reExecQueued then return true end
+    local url = "https://raw.githubusercontent.com/ellan8888/monitor-income/refs/heads/main/steal_an_egg.lua"
+    local scriptToRun = "loadstring(game:HttpGet('" .. url .. "'))()"
+    local queued = false
+    pcall(function()
+        if syn and syn.queue_on_teleport then syn.queue_on_teleport(scriptToRun); queued = true
+        elseif queue_on_teleport then queue_on_teleport(scriptToRun); queued = true
+        elseif fluxus and fluxus.queue_on_teleport then fluxus.queue_on_teleport(scriptToRun); queued = true
+        elseif getgenv().queue_on_teleport then getgenv().queue_on_teleport(scriptToRun); queued = true end
+    end)
+    if queued then reExecQueued = true end
+    return queued
+end
 
 -- ═══════════ [ FUNGSI BIGFROOT ] ═══════════
 local function setBigFrootAutoPlace(state)
@@ -345,17 +379,12 @@ local function hopServer()
     print("🚀 [SNIPER] Target Ditemukan! Nge-hop server... (Hop #" .. config.HopCount .. ")")
 
     config.LastHopJobId = game.JobId
-    saveConfig()
+    config.LastHopTime = os.time()
+    saveConfig() -- simpan monitor ON + daftar target SEBELUM pindah server
 
-    local url = "https://raw.githubusercontent.com/ellan8888/monitor-income/refs/heads/main/steal_an_egg.lua"
-    local scriptToRun = "loadstring(game:HttpGet('" .. url .. "'))()"
-
-    pcall(function()
-        if syn and syn.queue_on_teleport then syn.queue_on_teleport(scriptToRun)
-        elseif queue_on_teleport then queue_on_teleport(scriptToRun)
-        elseif fluxus and fluxus.queue_on_teleport then fluxus.queue_on_teleport(scriptToRun)
-        elseif getgenv().queue_on_teleport then getgenv().queue_on_teleport(scriptToRun) end
-    end)
+    if not queueReExecute() then
+        warn("⚠️ [SNIPER] queue_on_teleport nggak didukung executor. Taruh script di folder AutoExecute biar jalan lagi setelah hop.")
+    end
 
     task.wait(0.5)
 
@@ -382,6 +411,8 @@ local function hopServer()
             if playing and maxP then
                 if playing < maxP and server.id ~= game.JobId and server.id ~= config.LastHopJobId then
                     pcall(function() TeleportService:TeleportToPlaceInstance(PLACE_ID, server.id, player) end)
+                    -- kalau teleport gagal (server penuh dll), buka kunci hop supaya bisa coba lagi
+                    task.delay(25, function() is_hopping = false end)
                     return
                 end
             end
@@ -1437,7 +1468,7 @@ end)
 task.spawn(function()
     print("✅ Loop Webhook berjalan!")
     while task.wait(INTERVAL) do
-        if not _G.StealEgg_Hub_Active or _G.StealEgg_LoopBroken then
+        if not _G.StealEgg_Hub_Active or _G.StealEgg_LoopBroken or _G.StealEgg_RunId ~= RUN_ID then
             print("🛑 [Webhook Loop] Berhenti.")
             break
         end
@@ -1461,7 +1492,7 @@ task.spawn(function()
     local sniperCounter = 0
 
     while task.wait(1) do
-        if not _G.StealEgg_Hub_Active or _G.StealEgg_LoopBroken then
+        if not _G.StealEgg_Hub_Active or _G.StealEgg_LoopBroken or _G.StealEgg_RunId ~= RUN_ID then
             print("🛑 [Monitor Loop] Berhenti.")
             break
         end
@@ -1522,23 +1553,34 @@ end)
 
 -- ═══════════ [ AUTO EXECUTE & AUTO LOAD ] ═══════════
 local function autoReExecute()
-    local url = "https://raw.githubusercontent.com/ellan8888/monitor-income/refs/heads/main/steal_an_egg.lua"
-    local scriptToRun = "loadstring(game:HttpGet('" .. url .. "'))()"
-    pcall(function()
-        if syn and syn.queue_on_teleport then syn.queue_on_teleport(scriptToRun)
-        elseif queue_on_teleport then queue_on_teleport(scriptToRun)
-        elseif fluxus and fluxus.queue_on_teleport then fluxus.queue_on_teleport(scriptToRun)
-        elseif getgenv().queue_on_teleport then getgenv().queue_on_teleport(scriptToRun) end
-    end)
+    if not queueReExecute() then
+        warn("⚠️ [Auto-Execute] queue_on_teleport nggak didukung executor. Taruh script di folder AutoExecute biar jalan lagi setelah hop.")
+    end
 end
 
 task.spawn(function()
     task.wait(3)
     
+    -- Habis server hop? (hop terakhir < 3 menit lalu dari server yang berbeda)
+    local recentHop = config.LastHopJobId ~= nil and config.LastHopJobId ~= game.JobId
+        and config.LastHopTime ~= nil and (os.time() - config.LastHopTime) < 180
+
     if config.MonitorEnabled then
         monitorToggle.SetState(true)
-        if monitorToggle.Callback then monitorToggle.Callback(true) end
-        webhookToggle.SetState(false)
+        if recentHop then
+            -- PULIHKAN setelah hop: JANGAN panggil callback toggle, karena callback
+            -- menimpa daftar target dengan player server baru.
+            webhookToggle.SetState(false)
+            config.WebhookEnabled = false
+            is_monitoring = true
+            StatusLbl.Text = "Status: Monitor Egg ON (dipulihkan, " .. #config.DetectedTargets .. " target lama)"
+            pcall(function()
+                StarterGui:SetCore("SendNotification", {Title = "Monitor Dipulihkan", Text = "Lanjut setelah hop. " .. #config.DetectedTargets .. " target dari server sebelumnya.", Duration = 5})
+            end)
+        else
+            if monitorToggle.Callback then monitorToggle.Callback(true) end
+            webhookToggle.SetState(false)
+        end
     else
         monitorToggle.SetState(false)
         webhookToggle.SetState(config.WebhookEnabled)
