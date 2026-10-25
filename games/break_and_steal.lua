@@ -685,6 +685,158 @@ ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = CoreGui
 _G.BreakSteal_Hub_UI = ScreenGui
 
+-- ═══════════ [ NOTIF CUSTOM ] ═══════════
+local NOTIF_W, NOTIF_H = 300, 64
+local MAX_NOTIFS = 4
+
+local NotifHolder = Instance.new("Frame")
+NotifHolder.Name = "NotifHolder"
+NotifHolder.AnchorPoint = Vector2.new(1, 1)
+NotifHolder.Position = UDim2.new(1, -16, 1, -16)
+NotifHolder.Size = UDim2.new(0, NOTIF_W, 0, 420)
+NotifHolder.BackgroundTransparency = 1
+NotifHolder.Parent = ScreenGui
+
+local NotifLayout = Instance.new("UIListLayout", NotifHolder)
+NotifLayout.SortOrder = Enum.SortOrder.LayoutOrder
+NotifLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+NotifLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+NotifLayout.Padding = UDim.new(0, 8)
+
+local notifOrder = 0
+local activeNotifs = {}
+
+local function notifStyle(title)
+    local up = tostring(title):upper()
+    if up:find("BERHASIL", 1, true) or up:find("TERCAPAI", 1, true) or up:find("BELI GALAXY", 1, true) then
+        return "checkc", Colors.Green
+    elseif up:find("RE-FARM", 1, true) or up:find("AUTO FARM", 1, true) then
+        return "bolt", Colors.Accent
+    elseif up:find("TARGET", 1, true) then
+        return "target", Colors.Accent
+    end
+    return "shop", Colors.Amber
+end
+
+local function dismissNotif(entry)
+    if entry.closed then return end
+    entry.closed = true
+    for i, e in ipairs(activeNotifs) do
+        if e == entry then table.remove(activeNotifs, i) break end
+    end
+    local out = TweenService:Create(entry.card, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        Position = UDim2.new(0, NOTIF_W + 40, 0, 0)
+    })
+    out:Play()
+    out.Completed:Connect(function()
+        local collapse = TweenService:Create(entry.wrap, TweenInfo.new(0.15), { Size = UDim2.new(1, 0, 0, 0) })
+        collapse:Play()
+        collapse.Completed:Connect(function() entry.wrap:Destroy() end)
+    end)
+end
+
+local function buildNotif(title, text, duration)
+    duration = duration or 5
+    local iconKey, color = notifStyle(title)
+
+    local cleanTitle = StripEmoji(title):lower()
+    cleanTitle = cleanTitle:sub(1, 1):upper() .. cleanTitle:sub(2)
+    local cleanText = StripEmoji((tostring(text):gsub("\n", " · "):gsub("→", ">")))
+
+    notifOrder = notifOrder + 1
+    local wrap = Instance.new("Frame")
+    wrap.BackgroundTransparency = 1
+    wrap.Size = UDim2.new(1, 0, 0, NOTIF_H)
+    wrap.LayoutOrder = notifOrder
+    wrap.Parent = NotifHolder
+
+    local card = Instance.new("TextButton")
+    card.AutoButtonColor = false
+    card.Text = ""
+    card.Size = UDim2.new(1, 0, 1, 0)
+    card.Position = UDim2.new(0, NOTIF_W + 40, 0, 0)
+    card.BackgroundColor3 = Colors.Background
+    card.BackgroundTransparency = 0.03
+    card.BorderSizePixel = 0
+    card.Parent = wrap
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 12)
+    local stroke = Instance.new("UIStroke", card)
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Color = Colors.Border
+    stroke.Thickness = 1
+
+    -- strip aksen kiri
+    local bar = Instance.new("Frame", card)
+    bar.Size = UDim2.new(0, 4, 1, -24)
+    bar.Position = UDim2.new(0, 8, 0, 8)
+    bar.BackgroundColor3 = color
+    bar.BorderSizePixel = 0
+    Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+
+    -- kotak ikon
+    local iconBox = Instance.new("Frame", card)
+    iconBox.Size = UDim2.new(0, 32, 0, 32)
+    iconBox.Position = UDim2.new(0, 22, 0, 10)
+    iconBox.BackgroundColor3 = Colors.ChipOn
+    iconBox.BorderSizePixel = 0
+    Instance.new("UICorner", iconBox).CornerRadius = UDim.new(0, 8)
+    local ic = MakeIcon(iconBox, iconKey, 18, color)
+    ic.AnchorPoint = Vector2.new(0.5, 0.5)
+    ic.Position = UDim2.new(0.5, 0, 0.5, 0)
+
+    -- teks
+    local t = NewLabel(card, cleanTitle, 13, Enum.Font.GothamBold, Colors.Text)
+    t.Size = UDim2.new(1, -74, 0, 16)
+    t.Position = UDim2.new(0, 64, 0, 8)
+    t.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local s = NewLabel(card, cleanText, 11, Enum.Font.Gotham, Colors.TextDim)
+    s.Size = UDim2.new(1, -74, 0, 26)
+    s.Position = UDim2.new(0, 64, 0, 25)
+    s.TextWrapped = true
+    s.TextYAlignment = Enum.TextYAlignment.Top
+    s.TextTruncate = Enum.TextTruncate.AtEnd
+
+    -- timer
+    local track = Instance.new("Frame", card)
+    track.Size = UDim2.new(1, -32, 0, 3)
+    track.Position = UDim2.new(0, 16, 1, -7)
+    track.BackgroundColor3 = Colors.Track
+    track.BorderSizePixel = 0
+    Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+    local fill = Instance.new("Frame", track)
+    fill.Size = UDim2.new(1, 0, 1, 0)
+    fill.BackgroundColor3 = color
+    fill.BorderSizePixel = 0
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+    local entry = { wrap = wrap, card = card, closed = false }
+    table.insert(activeNotifs, entry)
+    if #activeNotifs > MAX_NOTIFS then dismissNotif(activeNotifs[1]) end
+
+    TweenService:Create(card, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0, 0, 0, 0)
+    }):Play()
+    TweenService:Create(fill, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
+        Size = UDim2.new(0, 0, 1, 0)
+    }):Play()
+
+    card.MouseButton1Click:Connect(function() dismissNotif(entry) end)
+    task.delay(duration, function() dismissNotif(entry) end)
+end
+
+-- ganti showNotif lama dengan yang baru
+showNotif = function(title, text, duration)
+    local ok = pcall(buildNotif, title, text, duration)
+    if not ok then
+        pcall(function()
+            StarterGui:SetCore("SendNotification", {
+                Title = StripEmoji(title), Text = StripEmoji(text), Duration = duration or 5
+            })
+        end)
+    end
+end
+
 local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Size = UDim2.new(0, 340, 0, 350) 
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
