@@ -455,6 +455,7 @@ local function tryBuyPickaxe()
     local currentMoney = getRealCash()
     local money_str = formatNumber(currentMoney)
 
+    -- ⭐ STEP 1: Cek Prereq (Galaxy)
     if not hasCheckedOwnership then
         local hasGalaxy = checkOwnershipSilent(prereqName, prereqId)
         if not hasGalaxy then
@@ -479,6 +480,7 @@ local function tryBuyPickaxe()
         end
     end
 
+    -- ⭐ STEP 2: Cek Target (Enchanted)
     if not hasCheckedTarget then
         if checkOwnershipSilent(targetPickaxeName, targetPickaxeId) then
             autoBuyEnabled = false
@@ -486,15 +488,17 @@ local function tryBuyPickaxe()
             hasCheckedTarget = true
             return
         end
-        hasCheckedTarget = true
+        -- ⭐ FIX: TIDAK set hasCheckedTarget = true di sini
     end
 
+    -- ⭐ STEP 3: Beli Target
     if currentMoney < targetBuyPrice then
         buyStatus = "⏳ NUNGGU UANG " .. targetPickaxeName .. ": (" .. money_str .. " / " .. formatNumber(targetBuyPrice) .. ")"
         return
     end
     
     buyStatus = "⚡ MEMBELI " .. string.upper(targetPickaxeName) .. "..."
+    -- ... (sisa kode beli)
     local ok, err = pcall(function()
         local Event = ReplicatedStorage:FindFirstChild("PickaxeShopRequest")
         if Event then
