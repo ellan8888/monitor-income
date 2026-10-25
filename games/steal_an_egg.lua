@@ -34,10 +34,13 @@ local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 
+-- ⭐ TUNGGU KARAKTER BENERAN ADA (setelah hop/teleport)
 if not player.Character then
+    print("⏳ [Wait] Nunggu karakter muncul...")
     player.CharacterAdded:Wait()
-    task.wait(2)
+    print("✅ [Wait] Karakter muncul!")
 end
+task.wait(2) -- Extra wait biar leaderstats & GUI siap
 
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1560789097440616529/097v0ksImZfYm2g4zSQKbEvb-9ttIwSHah-v5nxavKklco3t5S71rMR9vySSjOwtMEEn"
 local INTERVAL = 15
