@@ -4,25 +4,23 @@
 
 -- ⭐ SISTEM ANTI-DOUBLE (Deteksi UI & Loop Lama)
 local CoreGui = game:GetService("CoreGui")
+local genv = (getgenv and getgenv()) or _G
 
--- 1. Matikan loop lama kalau ada
-if _G.BreakSteal_LoopBroken ~= nil then
-    _G.BreakSteal_LoopBroken = true 
-    print("🛑 Mematikan loop dari script sebelumnya...")
-    task.wait(0.2)
+-- ⭐ ANTI-DOUBLE: Run ID unik + dedupe window
+local MY_RUN_ID = tostring(os.clock()) .. "-" .. tostring(math.random(1, 1e9))
+
+-- Kalau ada instance lain yang baru start < 8 detik lalu (autoexec + queue_on_teleport), keluar
+if genv.VZiir0_RunId and genv.VZiir0_LastStart and (os.time() - genv.VZiir0_LastStart) < 8 then
+    print("⚠️ Instance lain baru jalan, skip yang ini.")
+    return
 end
 
--- 2. Hapus SEMUA UI lama yang namanya "VZiir0HubGlass"
-for _, gui in ipairs(CoreGui:GetChildren()) do
-    if gui:IsA("ScreenGui") and gui.Name == "VZiir0HubGlass" then
-        gui:Destroy()
-    end
-end
+genv.VZiir0_RunId = MY_RUN_ID
+genv.VZiir0_LastStart = os.time()
 
--- 3. Set state baru
-_G.BreakSteal_Hub_Active = true
-_G.BreakSteal_Hub_UI = nil
-_G.BreakSteal_LoopBroken = false
+local function isCurrent()
+    return genv.VZiir0_RunId == MY_RUN_ID
+end
 
 local player = game.Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
@@ -37,6 +35,7 @@ if not player.Character then
     player.CharacterAdded:Wait()
     task.wait(2)
 end
+if not isCurrent() then return end
 
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1560789097440616529/097v0ksImZfYm2g4zSQKbEvb-9ttIwSHah-v5nxavKklco3t5S71rMR9vySSjOwtMEEn"
 local INTERVAL = 2 
@@ -665,6 +664,20 @@ local function NewLabel(parent, text, size, font, color, align)
     return l
 end
 
+for _, gui in ipairs(CoreGui:GetChildren()) do
+    if gui:IsA("ScreenGui") and gui.Name == "VZiir0HubGlass" then
+        gui:Destroy()
+    end
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "VZiir0HubGlass"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.DisplayOrder = 999 
+ScreenGui.Parent = CoreGui
+
+local ScreenGui = Instance.new("ScreenGui")
+
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "VZiir0HubGlass"
 ScreenGui.ResetOnSpawn = false
@@ -724,7 +737,6 @@ CloseIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
 CloseBtn.MouseEnter:Connect(function() SetIconColor(CloseIcon, Colors.Danger) end)
 CloseBtn.MouseLeave:Connect(function() SetIconColor(CloseIcon, Colors.TextDim) end)
 CloseBtn.MouseButton1Click:Connect(function() 
-    _G.BreakSteal_Hub_Active = false
     ScreenGui:Destroy() 
 end)
 
@@ -1316,7 +1328,7 @@ local function ApplyView(v)
 end
 
 task.spawn(function()
-    while ScreenGui.Parent do
+    while ScreenGui.Parent and isCurrent() do
         local ok, v = pcall(computeView)
         if ok and v then pcall(ApplyView, v) end
         task.wait(INTERVAL)
@@ -1327,8 +1339,9 @@ end)
 task.spawn(function()
     print("✅ Monitor Break & Steal berjalan!")
     while task.wait(INTERVAL) do
-        if not _G.BreakSteal_Hub_Active or _G.BreakSteal_LoopBroken then
-            print("🛑 [Loop] Mematikan loop lama karena ada script baru.")
+        if not isCurrent() or not ScreenGui.Parent then
+            print("🛑 [Loop] Instance ini sudah digantikan / UI ditutup.")
+            pcall(function() ScreenGui:Destroy() end)
             break
         end
 
@@ -1470,6 +1483,7 @@ end
 -- ⭐ AUTO-LOAD STATE
 task.spawn(function()
     task.wait(3)
+    if not isCurrent() then return end
     local savedProfile = loadState()
     if savedProfile and savedProfile ~= "None" then
         print("🔄 [Auto-Load] Restoring profile: " .. savedProfile)
