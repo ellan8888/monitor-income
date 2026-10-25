@@ -1,5 +1,8 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg (v38 FINAL - Nasi Rendang + BigFroot)
+-- 🥚 V-Ziir0 Hub: Steal An Egg (v39 - Phase Ring + Egg Backpack)
+-- CATATAN: Hanya bagian "UI CUSTOM" dan "PENYEGAR TAMPILAN" yang diganti.
+-- Semua logika (config, BigFroot, Nasi Rendang, sniper, hop, webhook, auto load)
+-- sama persis dengan v38 FINAL.
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ SISTEM ANTI-DOUBLE
@@ -389,7 +392,9 @@ local function hopServer()
 end
 
 -- ═══════════════════════════════════════════════════════
--- ⭐ UI CUSTOM (V38 - COMPACT RING + ICON PACK)
+-- ⭐ UI CUSTOM (V39 - PHASE RING + EGG BACKPACK)
+-- Bagian ini murni tampilan. Variabel logika hanya DIBACA oleh UI,
+-- kecuali handler klik yang isinya sama persis dengan versi sebelumnya.
 -- ═══════════════════════════════════════════════════════
 local Colors = {
     Background = Color3.fromRGB(15, 26, 34),
@@ -405,11 +410,16 @@ local Colors = {
     Track = Color3.fromRGB(29, 51, 64),
     OnAccent = Color3.fromRGB(6, 40, 48),
     ChipOn = Color3.fromRGB(18, 48, 58),
+    AmberBg = Color3.fromRGB(43, 36, 23),
 }
 
+local EGG_GOAL = 100 -- target egg di tampilan (hanya UI, script tidak berhenti di angka ini)
+
+-- ⭐ IKON: digambar langsung dari bentuk (Frame), tidak butuh asset ID.
+-- Opsional: isi "rbxassetid://ID" untuk mengganti ikon tertentu dengan gambar.
 local Icons = {
     egg = "", monitor = "", target = "", close = "", minus = "", check = "", checkc = "",
-    hourglass = "", bolt = "", user = "", hop = "", send = "", scan = "",
+    hourglass = "", bolt = "", user = "", hop = "", send = "", scan = "", backpack = "", refresh = "",
 }
 local IconPaint = setmetatable({}, { __mode = "k" })
 
@@ -436,6 +446,22 @@ local IconDefs = {
         H.line(7.5, 9.5, 2, 8, 1.6); H.line(14, 2, 7.5, 9.5, 1.6)
     end,
     scan = function(H) H.ring(2, 2, 9.5, 9.5, 1.6); H.line(10, 10, 14, 14, 1.9) end,
+    backpack = function(H)
+        H.ring(5, 1.2, 6, 6, 1.4, 0.5)
+        H.ring(3, 5, 10, 10.5, 1.6, 0.22)
+        H.line(5.6, 10.5, 10.4, 10.5, 1.5)
+    end,
+    refresh = function(H)
+        local px, py
+        for a = 20, 300, 35 do
+            local x = 8 + 5 * math.cos(math.rad(a))
+            local y = 8 + 5 * math.sin(math.rad(a))
+            if px then H.line(px, py, x, y, 1.6) end
+            px, py = x, y
+        end
+        H.line(px, py, px + 3, py + 0.3, 1.6)
+        H.line(px, py, px + 0.2, py - 3, 1.6)
+    end,
 }
 
 local function MakeIcon(parent, key, size, color)
@@ -540,7 +566,7 @@ ScreenGui.Parent = CoreGui
 _G.StealEgg_Hub_UI = ScreenGui
 
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 340, 0, 332)
+MainFrame.Size = UDim2.new(0, 340, 0, 374)
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.BackgroundColor3 = Colors.Background
@@ -651,7 +677,7 @@ local function CreateTabButton(name, iconKey, xScale, xOffset)
 end
 
 local MonitorBtn, SetMonitorActive = CreateTabButton("Monitor", "monitor", 0, 2)
-local TargetBtn, SetTargetActive = CreateTabButton("Target", "target", 0.5, 2)
+local EggBtn, SetEggActive = CreateTabButton("Egg", "backpack", 0.5, 2)
 
 local ContentArea = Instance.new("Frame", MainFrame)
 ContentArea.Size = UDim2.new(1, -24, 1, -118)
@@ -711,11 +737,51 @@ local MonitorTab = Instance.new("Frame", ContentArea)
 MonitorTab.Size = UDim2.new(1, 0, 1, 0)
 MonitorTab.BackgroundTransparency = 1
 
+-- Langkah: Farming > Hop > Egg
+local StepsRow = Instance.new("Frame", MonitorTab)
+StepsRow.Size = UDim2.new(1, 0, 0, 22)
+StepsRow.BackgroundTransparency = 1
+local StepsLayout = Instance.new("UIListLayout", StepsRow)
+StepsLayout.FillDirection = Enum.FillDirection.Horizontal
+StepsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+StepsLayout.Padding = UDim.new(0, 6)
+
+local StepNames = { "Farming", "Hop", "Egg" }
+local StepIconKeys = { "egg", "hop", "egg" }
+local StepPills = {}
+for i, nm in ipairs(StepNames) do
+    local P = Instance.new("Frame")
+    P.Size = UDim2.new(0, 101, 1, 0)
+    P.BackgroundColor3 = Colors.GlassPanel
+    P.LayoutOrder = i
+    P.Parent = StepsRow
+    Instance.new("UICorner", P).CornerRadius = UDim.new(0, 8)
+    local Row = Instance.new("Frame", P)
+    Row.Size = UDim2.new(1, 0, 1, 0)
+    Row.BackgroundTransparency = 1
+    local Lay = Instance.new("UIListLayout", Row)
+    Lay.FillDirection = Enum.FillDirection.Horizontal
+    Lay.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    Lay.VerticalAlignment = Enum.VerticalAlignment.Center
+    Lay.SortOrder = Enum.SortOrder.LayoutOrder
+    Lay.Padding = UDim.new(0, 5)
+    local Ic = MakeIcon(Row, StepIconKeys[i], 12, Colors.TextDim)
+    Ic.LayoutOrder = 1
+    local Ck = MakeIcon(Row, "check", 12, Colors.Green)
+    Ck.LayoutOrder = 1
+    Ck.Visible = false
+    local L = NewLabel(Row, nm, 10, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
+    L.AutomaticSize = Enum.AutomaticSize.X
+    L.Size = UDim2.new(0, 0, 1, 0)
+    L.LayoutOrder = 2
+    StepPills[i] = { Frame = P, Label = L, Icon = Ic, Check = Ck }
+end
+
 -- Ring progress (dua setengah lingkaran + UIGradient pada UIStroke)
-local RING_SIZE, RING_T = 104, 9
+local RING_SIZE, RING_T = 96, 8
 local RingHolder = Instance.new("Frame", MonitorTab)
 RingHolder.Size = UDim2.new(0, RING_SIZE, 0, RING_SIZE)
-RingHolder.Position = UDim2.new(0.5, -RING_SIZE / 2, 0, 0)
+RingHolder.Position = UDim2.new(0.5, -RING_SIZE / 2, 0, 28)
 RingHolder.BackgroundTransparency = 1
 
 local Track = Instance.new("Frame", RingHolder)
@@ -762,24 +828,24 @@ local function SetRing(p)
 end
 SetRing(0)
 
-local PercentLbl = NewLabel(RingHolder, "—", 22, Enum.Font.GothamBold, Colors.Text, Enum.TextXAlignment.Center)
-PercentLbl.Size = UDim2.new(1, 0, 0, 26)
-PercentLbl.Position = UDim2.new(0, 0, 0.5, -20)
+local PercentLbl = NewLabel(RingHolder, "—", 20, Enum.Font.GothamBold, Colors.Text, Enum.TextXAlignment.Center)
+PercentLbl.Size = UDim2.new(1, 0, 0, 24)
+PercentLbl.Position = UDim2.new(0, 0, 0.5, -18)
 PercentLbl.ZIndex = 5
-local SubLbl = NewLabel(RingHolder, "Idle", 11, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
+local SubLbl = NewLabel(RingHolder, "Idle", 10, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
 SubLbl.Size = UDim2.new(1, 0, 0, 14)
 SubLbl.Position = UDim2.new(0, 0, 0.5, 6)
 SubLbl.ZIndex = 5
 
 local CaptionLbl = NewLabel(MonitorTab, "Aktifkan monitor di bawah", 12, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
-CaptionLbl.Size = UDim2.new(1, 0, 0, 18)
-CaptionLbl.Position = UDim2.new(0, 0, 0, 108)
+CaptionLbl.Size = UDim2.new(1, 0, 0, 16)
+CaptionLbl.Position = UDim2.new(0, 0, 0, 126)
 CaptionLbl.TextTruncate = Enum.TextTruncate.AtEnd
 
--- Kartu statistik: Target, Hop, Egg
+-- Kartu statistik: Egg, Hop, Auto Place
 local StatsRow = Instance.new("Frame", MonitorTab)
-StatsRow.Size = UDim2.new(1, 0, 0, 40)
-StatsRow.Position = UDim2.new(0, 0, 0, 132)
+StatsRow.Size = UDim2.new(1, 0, 0, 38)
+StatsRow.Position = UDim2.new(0, 0, 0, 148)
 StatsRow.BackgroundTransparency = 1
 local StatsLayout = Instance.new("UIListLayout", StatsRow)
 StatsLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -797,21 +863,21 @@ local function CreateStatCard(iconKey, caption, order)
     Ic.Position = UDim2.new(0, 9, 0.5, -8)
     local Val = NewLabel(C, "—", 14, Enum.Font.GothamBold, Colors.Text)
     Val.Size = UDim2.new(1, -34, 0, 18)
-    Val.Position = UDim2.new(0, 32, 0, 5)
+    Val.Position = UDim2.new(0, 32, 0, 4)
     local Cap = NewLabel(C, caption, 9, Enum.Font.Gotham, Colors.TextDim)
     Cap.Size = UDim2.new(1, -34, 0, 12)
-    Cap.Position = UDim2.new(0, 32, 0, 23)
+    Cap.Position = UDim2.new(0, 32, 0, 22)
     Cap.TextTruncate = Enum.TextTruncate.AtEnd
     return { Val = Val, Cap = Cap }
 end
-local StatTarget = CreateStatCard("user", "Target", 1)
+local StatEgg = CreateStatCard("egg", "Egg", 1)
 local StatHop = CreateStatCard("hop", "Hop", 2)
-local StatEgg = CreateStatCard("egg", "Egg", 3)
+local StatPlace = CreateStatCard("bolt", "Auto Place", 3)
 
 -- Toggle: Monitor + Webhook manual
 local ChipsRow = Instance.new("Frame", MonitorTab)
-ChipsRow.Size = UDim2.new(1, 0, 0, 34)
-ChipsRow.Position = UDim2.new(0, 0, 0, 180)
+ChipsRow.Size = UDim2.new(1, 0, 0, 30)
+ChipsRow.Position = UDim2.new(0, 0, 0, 192)
 ChipsRow.BackgroundTransparency = 1
 local ChipsLayout = Instance.new("UIListLayout", ChipsRow)
 ChipsLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -866,44 +932,18 @@ webhookToggle = CreateChipToggle(ChipsRow, "Webhook Manual", "send", 2, config.W
     end
 end, 155)
 
--- ── TAB TARGET ──────────────────────────────────────────
-local TargetTab = Instance.new("Frame", ContentArea)
-TargetTab.Size = UDim2.new(1, 0, 1, 0)
-TargetTab.BackgroundTransparency = 1
-TargetTab.Visible = false
-
-local SummaryCard = Instance.new("Frame", TargetTab)
-SummaryCard.Size = UDim2.new(1, 0, 0, 38)
-SummaryCard.BackgroundColor3 = Colors.GlassPanel
-Instance.new("UICorner", SummaryCard).CornerRadius = UDim.new(0, 10)
-local SumCap = NewLabel(SummaryCard, "Target dilacak", 10, Enum.Font.Gotham, Colors.TextDim)
-SumCap.Size = UDim2.new(1, -20, 0, 14)
-SumCap.Position = UDim2.new(0, 10, 0, 5)
-local SumValue = NewLabel(SummaryCard, "0 player", 12, Enum.Font.GothamBold, Colors.Text)
-SumValue.Size = UDim2.new(1, -20, 0, 16)
-SumValue.Position = UDim2.new(0, 10, 0, 18)
-
-local TargetList = Instance.new("ScrollingFrame", TargetTab)
-TargetList.Size = UDim2.new(1, 0, 0, 124)
-TargetList.Position = UDim2.new(0, 0, 0, 44)
-TargetList.BackgroundTransparency = 1
-TargetList.BorderSizePixel = 0
-TargetList.ScrollBarThickness = 3
-TargetList.ScrollBarImageColor3 = Colors.Accent
-TargetList.CanvasSize = UDim2.new(0, 0, 0, 0)
-TargetList.AutomaticCanvasSize = Enum.AutomaticSize.Y
-local TargetLayout = Instance.new("UIListLayout", TargetList)
-TargetLayout.Padding = UDim.new(0, 4)
-TargetLayout.SortOrder = Enum.SortOrder.LayoutOrder
-
--- Tombol Reset Target
-local ResetTargetBtn = Instance.new("TextButton", TargetTab)
-ResetTargetBtn.Size = UDim2.new(1, 0, 0, 34)
-ResetTargetBtn.Position = UDim2.new(0, 0, 1, -34)
-ResetTargetBtn.BackgroundColor3 = Colors.Accent
+-- Tombol Reset Target (pindah ke tab Monitor, isi handler sama persis)
+local ResetTargetBtn = Instance.new("TextButton", MonitorTab)
+ResetTargetBtn.Size = UDim2.new(1, 0, 0, 28)
+ResetTargetBtn.Position = UDim2.new(0, 0, 0, 228)
+ResetTargetBtn.BackgroundColor3 = Colors.GlassPanel
 ResetTargetBtn.AutoButtonColor = false
 ResetTargetBtn.Text = ""
 Instance.new("UICorner", ResetTargetBtn).CornerRadius = UDim.new(0, 10)
+local ResetStroke = Instance.new("UIStroke", ResetTargetBtn)
+ResetStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+ResetStroke.Thickness = 1
+ResetStroke.Color = Colors.Border
 local ResetRow = Instance.new("Frame", ResetTargetBtn)
 ResetRow.Size = UDim2.new(1, 0, 1, 0)
 ResetRow.BackgroundTransparency = 1
@@ -912,15 +952,15 @@ ResetLay.FillDirection = Enum.FillDirection.Horizontal
 ResetLay.HorizontalAlignment = Enum.HorizontalAlignment.Center
 ResetLay.VerticalAlignment = Enum.VerticalAlignment.Center
 ResetLay.SortOrder = Enum.SortOrder.LayoutOrder
-ResetLay.Padding = UDim.new(0, 8)
-local ResetIcon = MakeIcon(ResetRow, "scan", 16, Colors.OnAccent)
+ResetLay.Padding = UDim.new(0, 7)
+local ResetIcon = MakeIcon(ResetRow, "scan", 14, Colors.TextDim)
 ResetIcon.LayoutOrder = 1
-local ResetLbl = NewLabel(ResetRow, "Reset & Scan Ulang Target", 12, Enum.Font.GothamBold, Colors.OnAccent)
+local ResetLbl = NewLabel(ResetRow, "Reset & Scan Target", 11, Enum.Font.GothamMedium, Colors.TextDim)
 ResetLbl.AutomaticSize = Enum.AutomaticSize.X
 ResetLbl.Size = UDim2.new(0, 0, 1, 0)
 ResetLbl.LayoutOrder = 2
-ResetTargetBtn.MouseEnter:Connect(function() TweenService:Create(ResetTargetBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.15}):Play() end)
-ResetTargetBtn.MouseLeave:Connect(function() TweenService:Create(ResetTargetBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0}):Play() end)
+ResetTargetBtn.MouseEnter:Connect(function() TweenService:Create(ResetTargetBtn, TweenInfo.new(0.15), {BackgroundColor3 = Colors.SwitchOff}):Play() end)
+ResetTargetBtn.MouseLeave:Connect(function() TweenService:Create(ResetTargetBtn, TweenInfo.new(0.15), {BackgroundColor3 = Colors.GlassPanel}):Play() end)
 ResetTargetBtn.MouseButton1Click:Connect(function()
     local fresh = scanCurrentPlayers()
     config.DetectedTargets = {}
@@ -933,6 +973,85 @@ ResetTargetBtn.MouseButton1Click:Connect(function()
     print("🔄 [Target] Reset. Sekarang: " .. #config.DetectedTargets .. " player.")
     StarterGui:SetCore("SendNotification", {Title = "Target Reset", Text = #config.DetectedTargets .. " player terscan ulang.", Duration = 3})
 end)
+
+-- ── TAB EGG (isi backpack) ──────────────────────────────
+local EggTab = Instance.new("Frame", ContentArea)
+EggTab.Size = UDim2.new(1, 0, 1, 0)
+EggTab.BackgroundTransparency = 1
+EggTab.Visible = false
+
+local EggCard = Instance.new("Frame", EggTab)
+EggCard.Size = UDim2.new(1, 0, 0, 70)
+EggCard.BackgroundColor3 = Colors.GlassPanel
+Instance.new("UICorner", EggCard).CornerRadius = UDim.new(0, 12)
+
+local EggCardIcon = MakeIcon(EggCard, "backpack", 22, Colors.Accent)
+EggCardIcon.Position = UDim2.new(0, 12, 0, 9)
+local EggTotal = NewLabel(EggCard, "0", 20, Enum.Font.GothamBold, Colors.Text)
+EggTotal.Size = UDim2.new(0, 80, 0, 22)
+EggTotal.Position = UDim2.new(0, 42, 0, 6)
+local EggTotalCap = NewLabel(EggCard, "egg di backpack", 10, Enum.Font.Gotham, Colors.TextDim)
+EggTotalCap.Size = UDim2.new(0, 110, 0, 12)
+EggTotalCap.Position = UDim2.new(0, 42, 0, 28)
+
+local RefreshBtn = Instance.new("TextButton", EggCard)
+RefreshBtn.Size = UDim2.new(0, 86, 0, 26)
+RefreshBtn.Position = UDim2.new(1, -98, 0, 10)
+RefreshBtn.BackgroundTransparency = 1
+RefreshBtn.AutoButtonColor = false
+RefreshBtn.Text = ""
+Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 8)
+local RefreshStroke = Instance.new("UIStroke", RefreshBtn)
+RefreshStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+RefreshStroke.Thickness = 1
+RefreshStroke.Color = Colors.Accent
+local RefreshRow = Instance.new("Frame", RefreshBtn)
+RefreshRow.Size = UDim2.new(1, 0, 1, 0)
+RefreshRow.BackgroundTransparency = 1
+local RefreshLay = Instance.new("UIListLayout", RefreshRow)
+RefreshLay.FillDirection = Enum.FillDirection.Horizontal
+RefreshLay.HorizontalAlignment = Enum.HorizontalAlignment.Center
+RefreshLay.VerticalAlignment = Enum.VerticalAlignment.Center
+RefreshLay.SortOrder = Enum.SortOrder.LayoutOrder
+RefreshLay.Padding = UDim.new(0, 6)
+local RefreshIcon = MakeIcon(RefreshRow, "refresh", 14, Colors.Accent)
+RefreshIcon.LayoutOrder = 1
+local RefreshLbl = NewLabel(RefreshRow, "Refresh", 11, Enum.Font.GothamMedium, Colors.Accent)
+RefreshLbl.AutomaticSize = Enum.AutomaticSize.X
+RefreshLbl.Size = UDim2.new(0, 0, 1, 0)
+RefreshLbl.LayoutOrder = 2
+RefreshBtn.MouseEnter:Connect(function() TweenService:Create(RefreshBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.85}):Play() end)
+RefreshBtn.MouseLeave:Connect(function() TweenService:Create(RefreshBtn, TweenInfo.new(0.15), {BackgroundTransparency = 1}):Play() end)
+
+local EggBarBg = Instance.new("Frame", EggCard)
+EggBarBg.Size = UDim2.new(1, -24, 0, 6)
+EggBarBg.Position = UDim2.new(0, 12, 0, 48)
+EggBarBg.BackgroundColor3 = Colors.Track
+Instance.new("UICorner", EggBarBg).CornerRadius = UDim.new(1, 0)
+local EggBarFill = Instance.new("Frame", EggBarBg)
+EggBarFill.Size = UDim2.new(0, 0, 1, 0)
+EggBarFill.BackgroundColor3 = Colors.Green
+Instance.new("UICorner", EggBarFill).CornerRadius = UDim.new(1, 0)
+local EggBarName = NewLabel(EggCard, "Egg map terjauh", 9, Enum.Font.Gotham, Colors.TextDim)
+EggBarName.Size = UDim2.new(0.6, 0, 0, 12)
+EggBarName.Position = UDim2.new(0, 12, 0, 56)
+EggBarName.TextTruncate = Enum.TextTruncate.AtEnd
+local EggBarVal = NewLabel(EggCard, "0 / " .. EGG_GOAL, 9, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Right)
+EggBarVal.Size = UDim2.new(0.35, 0, 0, 12)
+EggBarVal.Position = UDim2.new(0.65, -12, 0, 56)
+
+local EggList = Instance.new("ScrollingFrame", EggTab)
+EggList.Size = UDim2.new(1, 0, 1, -76)
+EggList.Position = UDim2.new(0, 0, 0, 76)
+EggList.BackgroundTransparency = 1
+EggList.BorderSizePixel = 0
+EggList.ScrollBarThickness = 3
+EggList.ScrollBarImageColor3 = Colors.Accent
+EggList.CanvasSize = UDim2.new(0, 0, 0, 0)
+EggList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+local EggListLayout = Instance.new("UIListLayout", EggList)
+EggListLayout.Padding = UDim.new(0, 4)
+EggListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
 -- ── Footer: status (ditulis oleh LOOP MONITOR, nama variabel tetap) ──
 local FooterBar = Instance.new("Frame", MainFrame)
@@ -977,12 +1096,12 @@ SyncStatus()
 
 -- ── Navigasi tab ────────────────────────────────────────
 MonitorBtn.MouseButton1Click:Connect(function()
-    SetMonitorActive(true); SetTargetActive(false)
-    MonitorTab.Visible = true; TargetTab.Visible = false
+    SetMonitorActive(true); SetEggActive(false)
+    MonitorTab.Visible = true; EggTab.Visible = false
 end)
-TargetBtn.MouseButton1Click:Connect(function()
-    SetMonitorActive(false); SetTargetActive(true)
-    MonitorTab.Visible = false; TargetTab.Visible = true
+EggBtn.MouseButton1Click:Connect(function()
+    SetMonitorActive(false); SetEggActive(true)
+    MonitorTab.Visible = false; EggTab.Visible = true
 end)
 SetMonitorActive(true)
 
@@ -1024,97 +1143,248 @@ end)
 MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
 
 -- ═══════════ [ PENYEGAR TAMPILAN (BACA-SAJA) ] ═══════════
--- Ring: progres Speed menuju 15M, lalu fase Sniper (hunting / hop / aman).
+-- Fase ring: Farming (speed menuju 15M) > Hop server > Egg (menuju EGG_GOAL).
 -- Hanya MEMBACA variabel/fungsi yang sudah ada, tidak mengubah state apa pun.
 local ProgressValue = Instance.new("NumberValue")
 local idleMode = true
+local fixedText = false
 ProgressValue.Changed:Connect(function(p)
     SetRing(p)
-    if not idleMode then PercentLbl.Text = math.floor(p * 100 + 0.0001) .. "%" end
+    if not idleMode and not fixedText then PercentLbl.Text = math.floor(p * 100 + 0.0001) .. "%" end
 end)
 local function SetProgress(p)
     TweenService:Create(ProgressValue, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Value = p}):Play()
 end
 
+local function bigFrootPlaceState()
+    local ok, v = pcall(function()
+        local b = getgenv().__BigFrootSAE
+        if b and b.Flags then return b.Flags.AutoPlaceAll end
+        return nil
+    end)
+    if ok and v ~= nil then return v and true or false end
+    return nil
+end
+
 local function computeView()
-    local v = { idle = true, color = Colors.TextDim, sub = "Idle", pct = 0, caption = "Aktifkan monitor di bawah",
-                pill = "Idle", pillColor = Colors.TextDim }
+    local v = {
+        idx = 0, idle = true, color = Colors.TextDim, sub = "Idle", pct = 0,
+        caption = "Aktifkan monitor di bawah", pill = "Idle", pillColor = Colors.TextDim, place = false,
+    }
     if config.WebhookEnabled and not is_monitoring then
         v.pill, v.pillColor = "Webhook", Colors.Amber
     end
-    if not is_monitoring then return v end
+    if not is_monitoring then
+        local flag = bigFrootPlaceState()
+        v.place = flag == true
+        return v
+    end
 
     local _, _, speedNum = getMyData()
+    local eggs = tonumber(lastEggCount) or 0
     v.idle = false
+
     if speedNum < speedThreshold then
+        v.idx = 1
         v.color, v.sub = Colors.Accent, "Speed"
         v.pct = math.clamp(speedNum / speedThreshold, 0, 1)
         v.caption = formatNumber(speedNum) .. " / " .. formatNumber(speedThreshold)
         v.pill, v.pillColor = "Farming", Colors.Green
+        v.place = true
     else
-        v.pct = 1
-        v.pill, v.pillColor = "Sniper", Colors.Amber
-        if is_hopping then
-            v.color, v.sub, v.caption = Colors.Amber, "Hop", "Pindah server..."
-        elseif webhookStatusText:find("HOP", 1, true) then
-            v.color, v.sub, v.caption = Colors.Amber, "Hunting", "Target masih ada, hop"
-        elseif webhookStatusText:find("STAY", 1, true) then
-            v.color, v.sub, v.caption = Colors.Green, "Aman", "Target hilang, stay farming"
+        v.place = false
+        local stayed = webhookStatusText:find("STAY", 1, true) ~= nil
+        if stayed and not is_hopping then
+            v.pct = math.clamp(eggs / EGG_GOAL, 0, 1)
+            v.caption = eggs .. " / " .. EGG_GOAL .. " Egg"
+            if eggs >= EGG_GOAL then
+                v.idx = 4
+                v.color, v.sub = Colors.Green, "Selesai"
+                v.pill, v.pillColor = "Selesai", Colors.Green
+            else
+                v.idx = 3
+                v.color, v.sub = Colors.Green, "Egg"
+                v.pill, v.pillColor = "Egg", Colors.Green
+            end
         else
-            v.color, v.sub, v.caption = Colors.Amber, "Hunting", "Memindai target..."
+            v.idx = 2
+            v.pct = 1
+            v.color, v.sub = Colors.Amber, "Cari server"
+            v.ptxt = "Hop #" .. tostring(config.HopCount or 0)
+            v.pill, v.pillColor = "Hop", Colors.Amber
+            if is_hopping then
+                v.caption = "Pindah server..."
+            elseif webhookStatusText:find("HOP", 1, true) then
+                v.caption = "Target masih ada, nge-hop"
+            else
+                v.caption = "Memindai target..."
+            end
         end
     end
+    local flag = bigFrootPlaceState()
+    if flag ~= nil then v.place = flag end
     return v
 end
 
-local function inServer(name)
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p.Name:lower() == name:lower() then return true end
+-- ── Pemindai isi backpack (hanya saat tab Egg dibuka) ───
+local function ScanEggInventory()
+    local counts, order = {}, {}
+    local function add(name, n)
+        name = tostring(name or "")
+        name = (name:gsub("%s*[xX]%d+%s*$", ""))
+        name = (name:gsub("^%s+", ""):gsub("%s+$", ""))
+        if name == "" then return end
+        if not counts[name] then counts[name] = 0; table.insert(order, name) end
+        counts[name] = counts[name] + n
     end
-    return false
+
+    local gotGui = false
+    local pg = player:FindFirstChild("PlayerGui")
+    local inv = pg and pg:FindFirstChild("BackpackGui")
+    for _, k in ipairs({ "Backpack", "Main", "Inventory", "ScrollingFrame" }) do
+        inv = inv and inv:FindFirstChild(k)
+    end
+    if inv then
+        for _, slot in ipairs(inv:GetChildren()) do
+            if slot:IsA("Frame") or slot:IsA("ImageLabel") or slot:IsA("TextButton") then
+                local lbl = slot:FindFirstChild("ToolName") or slot:FindFirstChild("Name")
+                local itemName = nil
+                if lbl and lbl:IsA("TextLabel") then itemName = lbl.Text
+                elseif slot:IsA("ImageLabel") or slot:IsA("TextButton") then
+                    for _, d in ipairs(slot:GetDescendants()) do
+                        if d:IsA("TextLabel") and d.Text ~= "" then itemName = d.Text; break end
+                    end
+                end
+                if itemName and itemName:lower():find("egg") then
+                    local mult = 1
+                    for _, d in ipairs(slot:GetDescendants()) do
+                        if d:IsA("TextLabel") then
+                            local m = string.match(d.Text, "[xX](%d+)")
+                            if m then mult = tonumber(m) or 1 end
+                        end
+                    end
+                    add(itemName, mult)
+                    gotGui = true
+                end
+            end
+        end
+    end
+
+    local char = player.Character
+    if char then
+        for _, obj in ipairs(char:GetChildren()) do
+            if obj:IsA("Tool") and obj.Name:lower():find("egg") then add(obj.Name, 1) end
+        end
+    end
+    if not gotGui then
+        local bp = player:FindFirstChild("Backpack")
+        if bp then
+            for _, obj in ipairs(bp:GetChildren()) do
+                if obj:IsA("Tool") and obj.Name:lower():find("egg") then add(obj.Name, 1) end
+            end
+        end
+    end
+    if getnilinstances then
+        local okNil, nilList = pcall(getnilinstances)
+        if okNil and type(nilList) == "table" then
+            for _, obj in ipairs(nilList) do
+                local ok, isEgg = pcall(function() return obj:IsA("Tool") and obj.Name:lower():find("egg") end)
+                if ok and isEgg then add(obj.Name, 1) end
+            end
+        end
+    end
+
+    local function isMap(name)
+        return lastMapName ~= nil and lastMapName ~= "Unknown" and name:lower():find(tostring(lastMapName):lower(), 1, true) ~= nil
+    end
+    local list, total = {}, 0
+    for _, nm in ipairs(order) do
+        table.insert(list, { name = nm, count = counts[nm], map = isMap(nm) })
+        total = total + counts[nm]
+    end
+    table.sort(list, function(a, b)
+        if a.map ~= b.map then return a.map end
+        if a.count ~= b.count then return a.count > b.count end
+        return a.name < b.name
+    end)
+    return list, total
 end
 
-local TargetRows = {}
-local lastSig = ""
-local function RefreshTargetList()
-    local names = config.DetectedTargets or {}
+local EggRows = {}
+local lastEggScan = -100
+local lastEggSig = ""
+local function RefreshEggTab(force)
+    if not EggTab.Visible then return end
+    if not force and (os.clock() - lastEggScan) < 8 then return end
+    lastEggScan = os.clock()
+    local ok, list, total = pcall(ScanEggInventory)
+    if not ok or not list then return end
+
     local parts = {}
-    for _, n in ipairs(names) do table.insert(parts, n .. (inServer(n) and "+" or "-")) end
-    local sig = #names .. ":" .. table.concat(parts, ",")
-    if sig == lastSig then return end
-    lastSig = sig
-    for _, r in ipairs(TargetRows) do r:Destroy() end
-    TargetRows = {}
-    for i, n in ipairs(names) do
-        local here = inServer(n)
+    for _, it in ipairs(list) do table.insert(parts, it.name .. ":" .. it.count .. (it.map and "m" or "")) end
+    local sig = total .. "|" .. table.concat(parts, ",")
+    EggTotal.Text = tostring(total)
+    if sig == lastEggSig then return end
+    lastEggSig = sig
+
+    for _, r in ipairs(EggRows) do r:Destroy() end
+    EggRows = {}
+    if #list == 0 then
+        local Empty = NewLabel(EggList, "Belum ada egg di backpack", 11, Enum.Font.Gotham, Colors.TextDim, Enum.TextXAlignment.Center)
+        Empty.Size = UDim2.new(1, -8, 0, 30)
+        table.insert(EggRows, Empty)
+        return
+    end
+    for i, it in ipairs(list) do
         local Row = Instance.new("Frame")
-        Row.Size = UDim2.new(1, -8, 0, 26)
+        Row.Size = UDim2.new(1, -8, 0, 28)
         Row.BackgroundColor3 = Colors.GlassPanel
         Row.LayoutOrder = i
-        Row.Parent = TargetList
+        Row.Parent = EggList
         Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 8)
-        local Dot = Instance.new("Frame", Row)
-        Dot.Size = UDim2.new(0, 6, 0, 6)
-        Dot.Position = UDim2.new(0, 10, 0.5, -3)
-        Dot.BackgroundColor3 = here and Colors.Amber or Colors.SwitchOff
-        Instance.new("UICorner", Dot).CornerRadius = UDim.new(1, 0)
-        local Nm = NewLabel(Row, n, 11, Enum.Font.GothamMedium, Colors.Text)
-        Nm.Size = UDim2.new(0.62, 0, 1, 0)
-        Nm.Position = UDim2.new(0, 24, 0, 0)
+        local Ic = MakeIcon(Row, "egg", 14, it.map and Colors.Amber or Colors.TextDim)
+        Ic.Position = UDim2.new(0, 10, 0.5, -7)
+        local Nm = NewLabel(Row, it.name, 11, Enum.Font.GothamMedium, Colors.Text)
+        Nm.Size = UDim2.new(1, -170, 1, 0)
+        Nm.Position = UDim2.new(0, 32, 0, 0)
         Nm.TextTruncate = Enum.TextTruncate.AtEnd
-        local St = NewLabel(Row, here and "di server" or "tidak ada", 10, Enum.Font.Gotham, here and Colors.Amber or Colors.TextDim, Enum.TextXAlignment.Right)
-        St.Size = UDim2.new(0.3, 0, 1, 0)
-        St.Position = UDim2.new(0.7, -10, 0, 0)
-        table.insert(TargetRows, Row)
+        if it.map then
+            local Tag = NewLabel(Row, "Map terjauh", 9, Enum.Font.GothamMedium, Colors.Amber, Enum.TextXAlignment.Center)
+            Tag.BackgroundTransparency = 0
+            Tag.BackgroundColor3 = Colors.AmberBg
+            Tag.Size = UDim2.new(0, 70, 0, 16)
+            Tag.Position = UDim2.new(1, -124, 0.5, -8)
+            Instance.new("UICorner", Tag).CornerRadius = UDim.new(1, 0)
+        end
+        local Cnt = NewLabel(Row, "x" .. it.count, 12, Enum.Font.GothamBold, Colors.Text, Enum.TextXAlignment.Right)
+        Cnt.Size = UDim2.new(0, 44, 1, 0)
+        Cnt.Position = UDim2.new(1, -52, 0, 0)
+        table.insert(EggRows, Row)
     end
 end
+
+RefreshBtn.MouseButton1Click:Connect(function()
+    RefreshLbl.Text = "Memindai..."
+    task.spawn(function()
+        RefreshEggTab(true)
+        task.wait(0.4)
+        RefreshLbl.Text = "Refresh"
+    end)
+end)
 
 local function ApplyView(v)
     idleMode = v.idle == true
+    fixedText = v.ptxt ~= nil
     RightStroke.Color = v.color
     LeftStroke.Color = v.color
     SetProgress(v.pct)
-    if idleMode then PercentLbl.Text = "—" end
+    if idleMode then
+        PercentLbl.Text = "—"
+    elseif fixedText then
+        PercentLbl.Text = v.ptxt
+    elseif math.abs(ProgressValue.Value - v.pct) < 0.0005 then
+        PercentLbl.Text = math.floor(v.pct * 100 + 0.0001) .. "%"
+    end
     SubLbl.Text = v.sub
     SubLbl.TextColor3 = v.color
     CaptionLbl.Text = v.caption
@@ -1122,19 +1392,43 @@ local function ApplyView(v)
     PillLbl.TextColor3 = v.pillColor
     PillDot.BackgroundColor3 = v.pillColor
 
+    for i, pill in ipairs(StepPills) do
+        local done = (v.idx == 4 or v.idx > i)
+        pill.Icon.Visible = not done
+        pill.Check.Visible = done
+        if done then
+            pill.Frame.BackgroundColor3 = Colors.GlassPanel
+            pill.Label.TextColor3 = Colors.Green
+        elseif v.idx == i then
+            pill.Frame.BackgroundColor3 = Colors.ChipOn
+            pill.Label.TextColor3 = v.color
+            SetIconColor(pill.Icon, v.color)
+        else
+            pill.Frame.BackgroundColor3 = Colors.GlassPanel
+            pill.Label.TextColor3 = Colors.TextDim
+            SetIconColor(pill.Icon, Colors.TextDim)
+        end
+    end
+
     local nTargets = #(config.DetectedTargets or {})
-    StatTarget.Val.Text = tostring(nTargets)
-    StatHop.Val.Text = tostring(config.HopCount or 0)
+    local eggs = tonumber(lastEggCount) or 0
     StatEgg.Val.Text = lastEggCount ~= nil and tostring(lastEggCount) or "—"
     StatEgg.Cap.Text = lastMapName and ("Egg " .. tostring(lastMapName)) or "Egg"
-    SumValue.Text = nTargets .. " player  •  Hop #" .. tostring(config.HopCount or 0)
-    RefreshTargetList()
+    StatHop.Val.Text = "#" .. tostring(config.HopCount or 0)
+    StatPlace.Val.Text = v.place and "ON" or "OFF"
+    StatPlace.Val.TextColor3 = v.place and Colors.Green or Colors.TextDim
+    ResetLbl.Text = "Reset & Scan Target  •  " .. nTargets .. " player"
+
+    EggBarFill.Size = UDim2.new(math.clamp(eggs / EGG_GOAL, 0, 1), 0, 1, 0)
+    EggBarName.Text = lastMapName and lastMapName ~= "Unknown" and ("Egg " .. tostring(lastMapName) .. " (map terjauh)") or "Egg map terjauh"
+    EggBarVal.Text = eggs .. " / " .. EGG_GOAL
 end
 
 task.spawn(function()
     while ScreenGui.Parent do
         local ok, v = pcall(computeView)
         if ok and v then pcall(ApplyView, v) end
+        pcall(RefreshEggTab, false)
         task.wait(1)
     end
 end)
