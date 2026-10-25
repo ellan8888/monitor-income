@@ -295,6 +295,7 @@ local function getFarthestMapAndEgg()
 end
 
 -- ═══════════ [ SERVER HOP ] ═══════════
+-- ═══════════ [ SERVER HOP ] ═══════════
 local function hopServer()
     if is_hopping then return end
     is_hopping = true
@@ -334,9 +335,15 @@ local function hopServer()
 
     if success and response and response.data then
         for _, server in ipairs(response.data) do
-            if server.playing < server.maxPlayers and server.id ~= game.JobId and server.id ~= config.LastHopJobId then
-                pcall(function() TeleportService:TeleportToPlaceInstance(PLACE_ID, server.id, player) end)
-                return
+            -- ⭐ FIX: Pastiin datanya ada (angka) sebelum dibandingin
+            local playing = tonumber(server.playing)
+            local maxP = tonumber(server.maxPlayers)
+            
+            if playing and maxP then
+                if playing < maxP and server.id ~= game.JobId and server.id ~= config.LastHopJobId then
+                    pcall(function() TeleportService:TeleportToPlaceInstance(PLACE_ID, server.id, player) end)
+                    return
+                end
             end
         end
     end
@@ -492,7 +499,7 @@ end
 local MonitorTitle = Instance.new("TextLabel", MonitorTab)
 MonitorTitle.Size = UDim2.new(1, 0, 0, 20)
 MonitorTitle.BackgroundTransparency = 1
-MonitorTitle.Text = "Mode: Auto-Detect Target (v37)"
+MonitorTitle.Text = "-"
 MonitorTitle.TextColor3 = Colors.Accent
 MonitorTitle.Font = Enum.Font.GothamBold
 MonitorTitle.TextSize = 12
