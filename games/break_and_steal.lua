@@ -53,7 +53,7 @@ local is_buying_pickaxe = false
 local activeProfileName = "None"
 local is_farm_stopped = false
 local lastMoney, lastSpeed = nil, nil
-local lastWebhookTime = 0 
+local webhookMessageId = nil -- ⭐ Penampung ID pesan Discord
 local lastSpeedCheck = 0
 local stuckTimer = 0
 local hasSpeedIncreased = false
@@ -238,14 +238,40 @@ local function checkOwnershipSilent(targetName, targetId)
     return hasTarget
 end
 
+-- ⭐ FUNGSI KIRIM/EDIT WEBHOOK
 local function sendWebhook(payload)
     local body = HttpService:JSONEncode(payload)
-    for attempt = 1, 3 do
-        local ok, result = pcall(function() return httpFn({ Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = body }) end)
+    
+    -- Kalau udah ada Message ID, kita EDIT pesan lama
+    if webhookMessageId then
+        local editUrl = WEBHOOK_URL .. "/messages/" .. webhookMessageId
+        local ok, result = pcall(function() 
+            return httpFn({ Url = editUrl, Method = "PATCH", Headers = { ["Content-Type"] = "application/json" }, Body = body }) 
+        end)
         if ok then
-            local status = nil
-            if type(result) == "table" then status = result.Status or result.StatusCode end
+            local status = result.Status or result.StatusCode
             if status == 200 or status == 204 then return true end
+        end
+        -- Kalau edit gagal (misal pesan dihapus), reset ID biar kirim baru
+        webhookMessageId = nil
+    end
+
+    -- Kalau belum ada Message ID, kita KIRIM pesan baru
+    local sendUrl = WEBHOOK_URL .. "?wait=true"
+    for attempt = 1, 3 do
+        local ok, result = pcall(function() 
+            return httpFn({ Url = sendUrl, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = body }) 
+        end)
+        if ok then
+            local status = result.Status or result.StatusCode
+            if status == 200 or status == 204 then
+                -- Simpen Message ID buat di-edit nanti
+                local ok2, data = pcall(function() return HttpService:JSONDecode(result.Body) end)
+                if ok2 and data and data.id then
+                    webhookMessageId = data.id
+                end
+                return true 
+            end
         end
         task.wait(1)
     end
@@ -1299,6 +1325,7 @@ for i, pk in ipairs(PICKAXE_DB) do
         autoBuyEnabled = true
         hasCheckedOwnership = false
         buyStatus = "Siap beli (ID: "..pk.id..")"
+        webhookMessageId = nil -- ⭐ RESET ID: Bikin pesan baru pas ganti kapak
         showNotif("🛒 AUTO BUY AKTIF", "Menunggu uang cukup untuk " .. pk.name, 5)
         PaintPickaxeRows()
     end)
