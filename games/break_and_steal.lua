@@ -1,15 +1,12 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (v32 - Anti-Double Fixed)
+-- ✨ V-Ziir0 Hub: Break & Steal (v35 - Hardcode Master Config)
 -- ═══════════════════════════════════════════════════════
 
--- ⭐ SISTEM ANTI-DOUBLE (Deteksi UI & Loop Lama)
+-- ⭐ SISTEM ANTI-DOUBLE
 local CoreGui = game:GetService("CoreGui")
 local genv = (getgenv and getgenv()) or _G
-
--- ⭐ ANTI-DOUBLE: Run ID unik + dedupe window
 local MY_RUN_ID = tostring(os.clock()) .. "-" .. tostring(math.random(1, 1e9))
 
--- Kalau ada instance lain yang baru start < 8 detik lalu (autoexec + queue_on_teleport), keluar
 if genv.VZiir0_RunId and genv.VZiir0_LastStart and (os.time() - genv.VZiir0_LastStart) < 8 then
     print("⚠️ Instance lain baru jalan, skip yang ini.")
     return
@@ -24,13 +21,11 @@ end
 
 local player = game.Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
-
 local StarterGui = game:GetService("StarterGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
--- ⭐ PENGAMAN: Tunggu karakter beneran ada
 if not player.Character then
     player.CharacterAdded:Wait()
     task.wait(2)
@@ -42,6 +37,21 @@ local INTERVAL = 2
 local httpFn = request or http_request or (http and http.request)
 
 if not httpFn then warn("❌ Nggak ada fungsi request!"); return end
+
+-- ═══════════════════════════════════════════════════════
+-- ⭐ MASTER CONFIG (EDIT DI SINI KALAU MAU GANTI INCOME/SPEED)
+-- ═══════════════════════════════════════════════════════
+local MASTER_CONFIG = {
+    -- Format: ["Nama Pickaxe"] = { income = Angka, speed = Angka }
+    ["Enchanted Pickaxe"] = { income = 2e12, speed = 1e12 },  -- 2T Income, 1T Speed
+    ["Celestial Pickaxe"] = { income = 1e12, speed = 500e9 }, -- 1T Income, 500B Speed
+    
+    -- Kalau ada pickaxe baru dari game, tambahin di sini (contoh):
+    -- ["Haunted Pickaxe"] = { income = 3e12, speed = 1.5e12 },
+}
+
+local DEFAULT_INCOME = 2e12
+local DEFAULT_SPEED = 1e12 
 
 -- ⭐ STATE GLOBAL
 local is_monitoring = false
@@ -74,74 +84,133 @@ local prereqPrice = 4 * 1e15
 
 -- ⭐ FUNGSI SAVE/LOAD STATE
 local STATE_KEY = "VZiir0_SavedProfile"
-
 local function saveState(profileName)
     _G[STATE_KEY] = profileName
-    if writefile then
-        pcall(function() writefile("vziir0_state.txt", profileName) end)
-    end
-    print("💾 [State] Profil disimpan: " .. tostring(profileName))
+    if writefile then pcall(function() writefile("vziir0_state.txt", profileName) end) end
 end
-
 local function loadState()
-    if _G[STATE_KEY] and _G[STATE_KEY] ~= "" and _G[STATE_KEY] ~= "None" then
-        return _G[STATE_KEY]
-    end
+    if _G[STATE_KEY] and _G[STATE_KEY] ~= "" and _G[STATE_KEY] ~= "None" then return _G[STATE_KEY] end
     if readfile and isfile and isfile("vziir0_state.txt") then
         local ok, content = pcall(function() return readfile("vziir0_state.txt") end)
         if ok and content and content ~= "" then return content end
     end
     return nil
 end
-
 local function clearState()
     _G[STATE_KEY] = nil
-    if writefile then
-        pcall(function() writefile("vziir0_state.txt", "") end)
-    end
-    print("🗑️ [State] Profil dihapus.")
+    if writefile then pcall(function() writefile("vziir0_state.txt", "") end) end
 end
 
--- ⭐ DATABASE CONFIG
-local CONFIG_DB = {
-    { name = "Max Account (Income 2T)", amount = 2e12, targetSpeed = 1e12, pickaxeId = 20, pickaxeName = "Enchanted", pickaxePrice = 200 * 1e15, prereqId = 17, prereqName = "Galaxy", prereqPrice = 4 * 1e15 },
-    { name = "Akun Income 1T", amount = 1e12, targetSpeed = 500e9, pickaxeId = 18, pickaxeName = "Celestial", pickaxePrice = 20 * 1e15, prereqId = 17, prereqName = "Galaxy", prereqPrice = 4 * 1e15 }
-}
+-- ⭐ AUTO-DETECT PICKAXE DARI GAME
+local function formatNumberAuto(num)
+    local n = tonumber(num)
+    if not n then return "?" end
+    local suffixes = {"", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"}
+    local i = 1
+    while n >= 1000 and i < #suffixes do n = n / 1000; i = i + 1 end
+    if n % 1 == 0 then return string.format("%d%s", n, suffixes[i]) else return string.format("%.1f%s", n, suffixes[i]) end
+end
 
--- ⭐ DATABASE PICKAXE
-local PICKAXE_DB = {
-    { name = "Stone", id = 2, priceStr = "$80", priceRaw = 80 },
-    { name = "Iron", id = 3, priceStr = "$800", priceRaw = 800 },
-    { name = "Golden", id = 4, priceStr = "$20K", priceRaw = 20 * 1e3 },
-    { name = "Diamond", id = 5, priceStr = "$160K", priceRaw = 160 * 1e3 },
-    { name = "Strawberry", id = 6, priceStr = "$1.2M", priceRaw = 1.2 * 1e6 },
-    { name = "Cactus", id = 7, priceStr = "$6M", priceRaw = 6 * 1e6 },
-    { name = "Lightning", id = 8, priceStr = "$40M", priceRaw = 40 * 1e6 },
-    { name = "Candy", id = 9, priceStr = "$400M", priceRaw = 400 * 1e6 },
-    { name = "Rainbow", id = 10, priceStr = "$2.8B", priceRaw = 2.8 * 1e9 },
-    { name = "Crystal", id = 11, priceStr = "$20B", priceRaw = 20 * 1e9 },
-    { name = "Demon", id = 12, priceStr = "$120B", priceRaw = 120 * 1e9 },
-    { name = "Hacker", id = 13, priceStr = "$1.2T", priceRaw = 1.2 * 1e12 },
-    { name = "UFO", id = 14, priceStr = "$12T", priceRaw = 12 * 1e12 },
-    { name = "Secret", id = 15, priceStr = "$80T", priceRaw = 80 * 1e12 },
-    { name = "Cool", id = 16, priceStr = "$600T", priceRaw = 600 * 1e12 },
-    { name = "Galaxy", id = 17, priceStr = "$4Qa", priceRaw = 4 * 1e15 },
-    { name = "Celestial", id = 18, priceStr = "$20Qa", priceRaw = 20 * 1e15 }, 
-    { name = "Sci Fi", id = 19, priceStr = "$75Qa", priceRaw = 75 * 1e15 },
-    { name = "Enchanted", id = 20, priceStr = "$200Qa", priceRaw = 200 * 1e15 },
-}
+local PICKAXE_DB = {}
 
--- FUNGSI PENDUKUNG
+local function LoadPickaxeDB()
+    PICKAXE_DB = {} 
+    local success, config = pcall(function()
+        return require(ReplicatedStorage.Shared.PickaxeConfig)
+    end)
+
+    if success and config and config.Tiers then
+        for id, data in ipairs(config.Tiers) do
+            local rawPrice = data.Price or 0
+            table.insert(PICKAXE_DB, {
+                name = data.Name,
+                id = id,
+                priceRaw = rawPrice,
+                priceStr = "$" .. formatNumberAuto(rawPrice)
+            })
+        end
+        print("✅ [Auto-Detect] Berhasil load " .. #PICKAXE_DB .. " pickaxe dari game!")
+    else
+        warn("❌ Gagal load PickaxeConfig!")
+    end
+end
+LoadPickaxeDB()
+
+-- ⭐ SINKRONISASI PROFIL (AUTO-CLONE DENGAN MASTER CONFIG)
+local CONFIG_DB = {}
+
+local function SyncConfigDB()
+    CONFIG_DB = {} 
+    if #PICKAXE_DB == 0 then return end
+
+    local targetIdx20, targetIdx18
+    for i, pk in ipairs(PICKAXE_DB) do
+        if pk.id == 20 then targetIdx20 = i end
+        if pk.id == 18 then targetIdx18 = i end
+    end
+
+    -- 1. SETUP PROFIL STATIS (Income 1T tetap Celestial)
+    local pk18 = PICKAXE_DB[targetIdx18] or PICKAXE_DB[18]
+    local cfg18 = MASTER_CONFIG[pk18.name] or { income = 1e12, speed = 500e9 }
+    
+    table.insert(CONFIG_DB, {
+        name = "Akun Income 1T", 
+        amount = cfg18.income, targetSpeed = cfg18.speed,
+        pickaxeId = pk18.id, pickaxeName = pk18.name, pickaxePrice = pk18.priceRaw,
+        prereqId = PICKAXE_DB[17].id, prereqName = PICKAXE_DB[17].name, prereqPrice = PICKAXE_DB[17].priceRaw
+    })
+
+    -- 2. PROSES ANTREAN MAX ACC & CLONE-NYA
+    local latestIndex = #PICKAXE_DB
+    
+    if latestIndex > 20 then
+        local newPickaxesCount = latestIndex - 20
+        
+        for i = 1, newPickaxesCount do
+            local cloneIdx = 20 + (i - 1) 
+            local pkClone = PICKAXE_DB[cloneIdx]
+            local cfgClone = MASTER_CONFIG[pkClone.name] or { income = DEFAULT_INCOME, speed = DEFAULT_SPEED }
+            
+            table.insert(CONFIG_DB, {
+                name = "Income " .. formatNumberAuto(cfgClone.income), 
+                amount = cfgClone.income, 
+                targetSpeed = cfgClone.speed, 
+                pickaxeId = pkClone.id, pickaxeName = pkClone.name, pickaxePrice = pkClone.priceRaw, 
+                prereqId = PICKAXE_DB[cloneIdx-1].id, prereqName = PICKAXE_DB[cloneIdx-1].name, prereqPrice = PICKAXE_DB[cloneIdx-1].priceRaw
+            })
+        end
+
+        local newPk = PICKAXE_DB[latestIndex]
+        local cfgNew = MASTER_CONFIG[newPk.name] or { income = DEFAULT_INCOME, speed = DEFAULT_SPEED }
+        
+        table.insert(CONFIG_DB, {
+            name = "Max Account (Terbaru)", 
+            amount = cfgNew.income, 
+            targetSpeed = cfgNew.speed, 
+            pickaxeId = newPk.id, pickaxeName = newPk.name, pickaxePrice = newPk.priceRaw, 
+            prereqId = PICKAXE_DB[latestIndex-1].id, prereqName = PICKAXE_DB[latestIndex-1].name, prereqPrice = PICKAXE_DB[latestIndex-1].priceRaw
+        })
+    else
+        local maxPk = PICKAXE_DB[targetIdx20]
+        local cfgMax = MASTER_CONFIG[maxPk.name] or { income = DEFAULT_INCOME, speed = DEFAULT_SPEED }
+        
+        table.insert(CONFIG_DB, {
+            name = "Max Account (Income " .. formatNumberAuto(cfgMax.income) .. ")", 
+            amount = cfgMax.income, targetSpeed = cfgMax.speed,
+            pickaxeId = maxPk.id, pickaxeName = maxPk.name, pickaxePrice = maxPk.priceRaw,
+            prereqId = PICKAXE_DB[targetIdx20-1].id, prereqName = PICKAXE_DB[targetIdx20-1].name, prereqPrice = PICKAXE_DB[targetIdx20-1].priceRaw
+        })
+    end
+end
+SyncConfigDB()
+
+-- ⭐ FUNGSI PENDUKUNG
 local function StripEmoji(s)
     s = tostring(s)
     local ok, out = pcall(function()
         local buf = {}
         for _, cp in utf8.codes(s) do
-            local isEmoji = cp >= 0x1F000
-                or (cp >= 0x2600 and cp <= 0x27BF)
-                or (cp >= 0x2B00 and cp <= 0x2BFF)
-                or (cp >= 0x23E9 and cp <= 0x23FF)
-                or cp == 0xFE0F or cp == 0x200D
+            local isEmoji = cp >= 0x1F000 or (cp >= 0x2600 and cp <= 0x27BF) or (cp >= 0x2B00 and cp <= 0x2BFF) or (cp >= 0x23E9 and cp <= 0x23FF) or cp == 0xFE0F or cp == 0x200D
             if not isEmoji then table.insert(buf, utf8.char(cp)) end
         end
         return table.concat(buf)
@@ -161,19 +230,12 @@ local function getPickaxeName()
             local tooltip = ""
             local success, res = pcall(function() return item.ToolTip end)
             if success and res then tooltip = string.lower(res) end
-            
             if string.find(toolName, "pickaxe") or string.find(tooltip, "pickaxe") then
-                if res and res ~= "" then
-                    lastKnownPickaxe = res
-                    return res
-                else
-                    lastKnownPickaxe = item.Name
-                    return item.Name
-                end
+                if res and res ~= "" then lastKnownPickaxe = res; return res
+                else lastKnownPickaxe = item.Name; return item.Name end
             end
         end
     end
-
     local char = player.Character
     if char then
         for _, item in ipairs(char:GetChildren()) do
@@ -182,15 +244,9 @@ local function getPickaxeName()
                 local tooltip = ""
                 local success, res = pcall(function() return item.ToolTip end)
                 if success and res then tooltip = string.lower(res) end
-                
                 if string.find(toolName, "pickaxe") or string.find(tooltip, "pickaxe") then
-                    if res and res ~= "" then
-                        lastKnownPickaxe = res
-                        return res
-                    else
-                        lastKnownPickaxe = item.Name
-                        return item.Name
-                    end
+                    if res and res ~= "" then lastKnownPickaxe = res; return res
+                    else lastKnownPickaxe = item.Name; return item.Name end
                 end
             end
         end
@@ -201,10 +257,8 @@ end
 local function checkOwnershipSilent(targetName, targetId)
     local char = player.Character
     if not char then return false end
-
     local currentlyHeld = char:FindFirstChildWhichIsA("Tool")
     local heldName = currentlyHeld and currentlyHeld.Name or nil
-    
     local Event = ReplicatedStorage:FindFirstChild("PickaxeShopRequest")
     if not Event then return false end
     
@@ -217,21 +271,16 @@ local function checkOwnershipSilent(targetName, targetId)
             local tooltip = ""
             local success, res = pcall(function() return tool.ToolTip end)
             if success and res then tooltip = string.lower(res) end
-            
             if string.find(string.lower(tool.Name), string.lower(targetName)) or string.find(tooltip, string.lower(targetName)) then
                 hasTarget = true
                 break
             end
         end
     end
-    
     if not hasTarget and heldName then
         local oldId = nil
         for _, pk in ipairs(PICKAXE_DB) do
-            if string.find(string.lower(pk.name), string.lower(heldName)) then
-                oldId = pk.id
-                break
-            end
+            if string.find(string.lower(pk.name), string.lower(heldName)) then oldId = pk.id; break end
         end
         if oldId then Event:FireServer("Equip", oldId) end
     end
@@ -368,7 +417,6 @@ local function sendToDiscord(money, speed, status_text)
 end
 
 local function stopAutoFarm()
-    print("🛑 Mencoba matikan Auto Farm...")
     pcall(function()
         if getgenv().AutoFarm then getgenv().AutoFarm = false end
         if getgenv().Farm then getgenv().Farm = false end
@@ -393,7 +441,6 @@ local function stopAutoFarm()
 end
 
 local function startAutoFarm()
-    print("🚀 Mencoba nyalain Auto Farm...")
     pcall(function()
         if getgenv().AutoFarm then getgenv().AutoFarm = true end
         if getgenv().Farm then getgenv().Farm = true end
@@ -433,23 +480,23 @@ local function tryBuyPickaxe()
         local hasGalaxy = checkOwnershipSilent(prereqName, prereqId)
         if not hasGalaxy then
             if currentMoney >= prereqPrice then
-                buyStatus = "⚡ MEMBELI GALAXY..."
+                buyStatus = "⚡ MEMBELI " .. string.upper(prereqName) .. "..."
                 local Event = ReplicatedStorage:FindFirstChild("PickaxeShopRequest")
                 if Event then
                     Event:FireServer("Buy", prereqId)
                     task.wait(1)
                     Event:FireServer("Equip", prereqId)
-                    showNotif("🛒 BELI GALAXY", "Berhasil beli Galaxy! Lanjut farming target utama.", 5)
+                    showNotif("🛒 BELI PREREQ", "Berhasil beli " .. prereqName .. "!", 5)
                     hasCheckedOwnership = false 
                 end
                 return
             else
-                buyStatus = "⏳ NUNGGU UANG GALAXY: (" .. money_str .. " / " .. formatNumber(prereqPrice) .. ")"
+                buyStatus = "⏳ NUNGGU UANG " .. string.upper(prereqName) .. ": (" .. money_str .. " / " .. formatNumber(prereqPrice) .. ")"
                 return
             end
         else
             hasCheckedOwnership = true
-            buyStatus = "✅ Galaxy punya! Lanjut farming target utama..."
+            buyStatus = "✅ " .. prereqName .. " punya! Lanjut farming target utama..."
         end
     end
 
@@ -460,6 +507,7 @@ local function tryBuyPickaxe()
             hasCheckedTarget = true
             return
         end
+        -- ⭐ FIX: Baris hasCheckedTarget dihapus dari sini biar re-cek
     end
 
     if currentMoney < targetBuyPrice then
@@ -472,7 +520,6 @@ local function tryBuyPickaxe()
         local Event = ReplicatedStorage:FindFirstChild("PickaxeShopRequest")
         if Event then
             Event:FireServer("Buy", targetPickaxeId)
-            print("✅ Event Buy terkirim! (ID: " .. tostring(targetPickaxeId) .. ")")
         else
             warn("❌ PickaxeShopRequest nggak ketemu!")
         end
@@ -502,14 +549,13 @@ local function tryBuyPickaxe()
         local money_str_new, speed_str_new = getMyData()
         sendToDiscord(money_str_new, speed_str_new, "+ AUTO BUY SUCCESS (" .. targetPickaxeName .. ")")
     else
-        print("❌ Gagal nembak event: " .. tostring(err))
         buyStatus = "❌ Gagal beli."
         autoBuyEnabled = false
     end
 end
 
 -- ═══════════════════════════════════════════════════════
--- ⭐ UI CUSTOM (V30 - COMPACT RING)
+-- ⭐ UI CUSTOM
 -- ═══════════════════════════════════════════════════════
 local Colors = {
     Background = Color3.fromRGB(15, 26, 34),
@@ -531,10 +577,17 @@ local Icons = {
     pickaxe = "", monitor = "", shop = "", target = "", crown = "", jump = "", close = "", minus = "",
     check = "", hourglass = "", bolt = "", checkc = "", xc = "", coin = "",
 }
-local UI_SHORT = {
-    ["Max Account (Income 2T)"] = "Max 2T",
-    ["Akun Income 1T"] = "Income 1T",
-}
+
+local function getShortName(fullName)
+    if fullName:find("Max Account %(Terbaru%)") then return "Max Acc" end
+    if fullName:find("Max Account") then return "Max Acc" end
+    if fullName:find("Income 1T") then return "Income 1T" end
+    if fullName:find("Income") then 
+        local incomeStr = fullName:match("Income (%S+)")
+        if incomeStr then return "Inc " .. incomeStr end
+    end
+    return fullName
+end
 
 local IconPaint = setmetatable({}, { __mode = "k" })
 
@@ -674,14 +727,6 @@ ScreenGui.Name = "VZiir0HubGlass"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.DisplayOrder = 999 
 ScreenGui.Parent = CoreGui
-
-local ScreenGui = Instance.new("ScreenGui")
-
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "VZiir0HubGlass"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.DisplayOrder = 999 
-ScreenGui.Parent = CoreGui
 _G.BreakSteal_Hub_UI = ScreenGui
 
 -- ═══════════ [ NOTIF CUSTOM ] ═══════════
@@ -707,7 +752,7 @@ local activeNotifs = {}
 
 local function notifStyle(title)
     local up = tostring(title):upper()
-    if up:find("BERHASIL", 1, true) or up:find("TERCAPAI", 1, true) or up:find("BELI GALAXY", 1, true) then
+    if up:find("BERHASIL", 1, true) or up:find("TERCAPAI", 1, true) then
         return "checkc", Colors.Green
     elseif up:find("RE-FARM", 1, true) or up:find("AUTO FARM", 1, true) then
         return "bolt", Colors.Accent
@@ -764,7 +809,6 @@ local function buildNotif(title, text, duration)
     stroke.Color = Colors.Border
     stroke.Thickness = 1
 
-    -- strip aksen kiri
     local bar = Instance.new("Frame", card)
     bar.Size = UDim2.new(0, 4, 1, -24)
     bar.Position = UDim2.new(0, 8, 0, 8)
@@ -772,7 +816,6 @@ local function buildNotif(title, text, duration)
     bar.BorderSizePixel = 0
     Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
 
-    -- kotak ikon
     local iconBox = Instance.new("Frame", card)
     iconBox.Size = UDim2.new(0, 32, 0, 32)
     iconBox.Position = UDim2.new(0, 22, 0, 10)
@@ -783,7 +826,6 @@ local function buildNotif(title, text, duration)
     ic.AnchorPoint = Vector2.new(0.5, 0.5)
     ic.Position = UDim2.new(0.5, 0, 0.5, 0)
 
-    -- teks
     local t = NewLabel(card, cleanTitle, 13, Enum.Font.GothamBold, Colors.Text)
     t.Size = UDim2.new(1, -74, 0, 16)
     t.Position = UDim2.new(0, 64, 0, 8)
@@ -796,7 +838,6 @@ local function buildNotif(title, text, duration)
     s.TextYAlignment = Enum.TextYAlignment.Top
     s.TextTruncate = Enum.TextTruncate.AtEnd
 
-    -- timer
     local track = Instance.new("Frame", card)
     track.Size = UDim2.new(1, -32, 0, 3)
     track.Position = UDim2.new(0, 16, 1, -7)
@@ -824,7 +865,6 @@ local function buildNotif(title, text, duration)
     task.delay(duration, function() dismissNotif(entry) end)
 end
 
--- ganti showNotif lama dengan yang baru
 showNotif = function(title, text, duration)
     local ok = pcall(buildNotif, title, text, duration)
     if not ok then
@@ -836,8 +876,19 @@ showNotif = function(title, text, duration)
     end
 end
 
+-- ═══════════ [ LAYOUT CHIP DINAMIS ] ═══════════
+local CHIP_W, CHIP_H, CHIP_GAP = 101, 32, 6
+local CHIP_COLS = 3          -- chip per baris
+local CHIP_MAX_ROWS = 2      -- baris maksimal sebelum area chip jadi scroll
+
+local chipCount = #CONFIG_DB + 1                     -- +1 untuk tombol Auto Jump
+local chipRows = math.ceil(chipCount / CHIP_COLS)
+local chipVisibleRows = math.min(chipRows, CHIP_MAX_ROWS)
+local chipsHeight = chipVisibleRows * CHIP_H + (chipVisibleRows - 1) * CHIP_GAP
+local extraHeight = chipsHeight - CHIP_H
+
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 340, 0, 350) 
+MainFrame.Size = UDim2.new(0, 340, 0, 350 + extraHeight) 
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.BackgroundColor3 = Colors.Background
@@ -1008,9 +1059,8 @@ local StepsLayout = Instance.new("UIListLayout", StepsRow)
 StepsLayout.FillDirection = Enum.FillDirection.Horizontal
 StepsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 StepsLayout.Padding = UDim.new(0, 6)
-StepsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center -- ⬅️ TAMBAHIN INI
+StepsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
--- ⭐ KITA BIKIN STEP PILLS-NYA BISA DINAMIS
 local StepPills = {}
 local MaxSteps = 3
 for i = 1, MaxSteps do
@@ -1018,7 +1068,7 @@ for i = 1, MaxSteps do
     P.Size = UDim2.new(0, 101, 1, 0)
     P.BackgroundColor3 = Colors.GlassPanel
     P.LayoutOrder = i
-    P.Visible = false -- Default sembunyi, nanti di-set sama sistem
+    P.Visible = false
     P.Parent = StepsRow
     Instance.new("UICorner", P).CornerRadius = UDim.new(0, 8)
     
@@ -1110,20 +1160,29 @@ local CaptionLbl = NewLabel(HomeTab, "Aktifkan target di bawah", 12, Enum.Font.G
 CaptionLbl.Size = UDim2.new(1, 0, 0, 18)
 CaptionLbl.Position = UDim2.new(0, 0, 0, 142)
 
-local ChipsRow = Instance.new("Frame", HomeTab)
-ChipsRow.Size = UDim2.new(1, 0, 0, 32)
+local ChipsRow = Instance.new("ScrollingFrame", HomeTab)
+ChipsRow.Size = UDim2.new(1, 0, 0, chipsHeight)
 ChipsRow.Position = UDim2.new(0, 0, 0, 166)
 ChipsRow.BackgroundTransparency = 1
-local ChipsLayout = Instance.new("UIListLayout", ChipsRow)
-ChipsLayout.FillDirection = Enum.FillDirection.Horizontal
+ChipsRow.BorderSizePixel = 0
+ChipsRow.ScrollBarThickness = (chipRows > CHIP_MAX_ROWS) and 3 or 0
+ChipsRow.ScrollBarImageColor3 = Colors.Accent
+ChipsRow.ScrollingDirection = Enum.ScrollingDirection.Y
+ChipsRow.CanvasSize = UDim2.new(0, 0, 0, 0)
+ChipsRow.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+local ChipsLayout = Instance.new("UIGridLayout", ChipsRow)
 ChipsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-ChipsLayout.Padding = UDim.new(0, 6)
+ChipsLayout.FillDirection = Enum.FillDirection.Horizontal
+ChipsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+ChipsLayout.CellSize = UDim2.new(0, CHIP_W, 0, CHIP_H)
+ChipsLayout.CellPadding = UDim2.new(0, CHIP_GAP, 0, CHIP_GAP)
 
 local monitorToggles = {}
 local toggleCallbacks = {}
 
 for i, cfg in ipairs(CONFIG_DB) do
-    local toggleObj = CreateChipToggle(ChipsRow, UI_SHORT[cfg.name] or cfg.name, (cfg.amount >= 2e12) and "crown" or "target", i, false)
+    local toggleObj = CreateChipToggle(ChipsRow, getShortName(cfg.name), (cfg.amount >= 2e12) and "crown" or "target", i, false)
     local function callbackFn(state)
         if state then
             for _, other in pairs(monitorToggles) do
@@ -1173,7 +1232,7 @@ for i, cfg in ipairs(CONFIG_DB) do
     end)
 end
 
-local autoJumpToggle = CreateChipToggle(ChipsRow, "Auto Jump", "jump", 10, false)
+local autoJumpToggle = CreateChipToggle(ChipsRow, "Auto Jump", "jump", 9999, false)
 autoJumpToggle.SwitchBg.MouseButton1Click:Connect(function()
     local newState = not autoJumpToggle.GetState()
     autoJumpToggle.SetState(newState)
@@ -1182,7 +1241,7 @@ end)
 
 local StatusLbl = NewLabel(HomeTab, "Status: Pilih target monitor.", 10, Enum.Font.Gotham, Colors.TextDim, Enum.TextXAlignment.Center)
 StatusLbl.Size = UDim2.new(1, 0, 0, 16)
-StatusLbl.Position = UDim2.new(0, 0, 0, 204)
+StatusLbl.Position = UDim2.new(0, 0, 0, 166 + chipsHeight + 6)
 StatusLbl.TextTruncate = Enum.TextTruncate.AtEnd
 
 local FooterBar = Instance.new("Frame", MainFrame)
@@ -1314,7 +1373,7 @@ AutoBuyBtn.MouseButton1Click:Connect(function()
 end)
 SetHomeActive(true)
 
--- ── Tombol mengambang (tidak diubah) ────────────────────
+-- ── Tombol mengambang ────────────────────
 local FloatingBtn = Instance.new("ImageButton", ScreenGui)
 FloatingBtn.Size = UDim2.new(0, 50, 0, 50)
 FloatingBtn.Position = UDim2.new(0, 20, 0, 20) 
@@ -1410,30 +1469,25 @@ local function ApplyView(v)
     SubLbl.TextColor3 = v.color
     CaptionLbl.Text = v.caption
 
-    -- ⭐ LOGIKA BARU: Tentukan tampilan langkah berdasarkan mode
     local currentSteps = {}
     if is_monitoring then
-        -- Mode Monitor: Income > Speed > Kapak
         currentSteps = {
             { name = "Income", icon = "coin" },
             { name = "Speed", icon = "bolt" },
             { name = "Kapak", icon = "pickaxe" }
         }
     elseif autoBuyEnabled then
-        -- Mode Auto Buy (Monitor Mati): Cuma Kapak
         currentSteps = {
             { name = "Pickaxe", icon = "pickaxe" }
         }
     end
 
-    -- Update visual step pills
     for i, pill in ipairs(StepPills) do
         local stepData = currentSteps[i]
         if stepData then
             pill.Frame.Visible = true
             pill.Label.Text = stepData.name
             
-            -- Ganti ikon (karena ikonnya di-make saat awal, kita hapus dan bikin baru)
             if pill.Icon and pill.Icon.Parent then pill.Icon:Destroy() end
             local newIcon = MakeIcon(pill.Label.Parent, stepData.icon, 12, Colors.TextDim)
             newIcon.LayoutOrder = 1
@@ -1491,7 +1545,6 @@ task.spawn(function()
     print("✅ Monitor Break & Steal berjalan!")
     while task.wait(INTERVAL) do
         if not isCurrent() or not ScreenGui.Parent then
-            print("🛑 [Loop] Instance ini sudah digantikan / UI ditutup.")
             pcall(function() ScreenGui:Destroy() end)
             break
         end
@@ -1516,11 +1569,9 @@ task.spawn(function()
             if is_farm_stopped and not is_speed_done and targetSpeedValue > 0 then
                 if speed_num >= targetSpeedValue then
                     is_speed_done = true
-                    print("⚡ Speed target tercapai! Cek apakah kapak udah dibeli...")
                     if autoBuyEnabled then
                         local currentCash = getRealCash()
                         if currentCash < targetBuyPrice then
-                            print("💰 Uang belum cukup buat kapak! Auto Farm nyala lagi...")
                             is_farm_stopped = false 
                             is_income_done = true 
                             is_buying_pickaxe = true 
@@ -1552,7 +1603,6 @@ task.spawn(function()
                 local currentSpeedNum = parseNumber(speed_str) 
                 if currentSpeedNum > lastSpeedCheck then
                     if not hasSpeedIncreased then
-                        print("✅ Speed terdeteksi naik! Auto Jump aktif.")
                         hasSpeedIncreased = true
                     end
                     stuckTimer = 0
@@ -1568,7 +1618,6 @@ task.spawn(function()
                         humanoid.PlatformStand = false
                         task.wait(0.1) 
                         humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                        print("🦘 Speed stuck di Treadmill! Loncat 1x...")
                     end
                     stuckTimer = 0
                 end
@@ -1598,7 +1647,6 @@ task.spawn(function()
                 BuyStatusLbl.TextColor3 = Colors.Text
             end
             
-            -- ⭐ FIX: Kirim progress Auto Buy tiap 15 detik WALAUPUN Monitor mati
             if not is_monitoring and (os.time() - lastWebhookTime) >= 15 then
                 local m_str, s_str = getMyData()
                 sendToDiscord(m_str, s_str, "🛒 AUTO BUY PROGRESS")
@@ -1613,7 +1661,6 @@ end)
 
 local function autoReExecute()
     if _G.VZiir0_AutoExec_Active then
-        print("⚠️ [Auto-Execute] Script udah jalan dari Autoexec. Skip queue_on_teleport.")
         return
     end
     _G.VZiir0_AutoExec_Active = true
@@ -1637,7 +1684,6 @@ task.spawn(function()
     if not isCurrent() then return end
     local savedProfile = loadState()
     if savedProfile and savedProfile ~= "None" then
-        print("🔄 [Auto-Load] Restoring profile: " .. savedProfile)
         for i, cfg in ipairs(CONFIG_DB) do
             if cfg.name == savedProfile and monitorToggles[i] then
                 monitorToggles[i].SetState(true)
