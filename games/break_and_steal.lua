@@ -621,6 +621,18 @@ local IconDefs = {
     checkc = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.line(5, 8.2, 7.1, 10.3, 1.5); H.line(7.1, 10.3, 11, 5.8, 1.5) end,
     xc = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.line(5.6, 5.6, 10.4, 10.4, 1.5); H.line(10.4, 5.6, 5.6, 10.4, 1.5) end,
     coin = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.line(8, 4.6, 8, 11.4, 1.6) end,
+    server = function(H)
+        H.ring(2, 2.5, 12, 4.5, 1.4, 0.25); H.ring(2, 9, 12, 4.5, 1.4, 0.25)
+        H.dot(5, 4.75, 1.6); H.dot(5, 11.25, 1.6)
+    end,
+    copy = function(H)
+        H.ring(5.5, 5.5, 8.5, 8.5, 1.5, 0.15)
+        H.line(2.5, 10.5, 2.5, 2.5, 1.5); H.line(2.5, 2.5, 10.5, 2.5, 1.5)
+    end,
+    login = function(H)
+        H.line(2, 8, 10, 8, 1.8); H.line(10, 8, 6.5, 4.5, 1.8); H.line(10, 8, 6.5, 11.5, 1.8)
+        H.line(13, 2.5, 13, 13.5, 1.8)
+    end,
 }
 
 local function MakeIcon(parent, key, size, color)
@@ -753,8 +765,12 @@ local activeNotifs = {}
 
 local function notifStyle(title)
     local up = tostring(title):upper()
-    if up:find("BERHASIL", 1, true) or up:find("TERCAPAI", 1, true) then
+    if up:find("GAGAL", 1, true) then
+        return "xc", Colors.Danger
+    elseif up:find("BERHASIL", 1, true) or up:find("TERCAPAI", 1, true) or up:find("TERSALIN", 1, true) then
         return "checkc", Colors.Green
+    elseif up:find("SERVER", 1, true) or up:find("JOIN", 1, true) then
+        return "server", Colors.Accent
     elseif up:find("RE-FARM", 1, true) or up:find("AUTO FARM", 1, true) then
         return "bolt", Colors.Accent
     elseif up:find("TARGET", 1, true) then
@@ -963,7 +979,7 @@ Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 10)
 
 local function CreateTabButton(name, iconKey, xScale, xOffset)
     local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(0.5, -4, 1, -6)
+    Btn.Size = UDim2.new(1/3, -4, 1, -6)
     Btn.Position = UDim2.new(xScale, xOffset, 0, 3)
     Btn.BackgroundColor3 = Colors.Accent
     Btn.BackgroundTransparency = 1
@@ -999,7 +1015,8 @@ local function CreateTabButton(name, iconKey, xScale, xOffset)
 end
 
 local HomeBtn, SetHomeActive = CreateTabButton("Monitor", "monitor", 0, 2)
-local AutoBuyBtn, SetAutoBuyActive = CreateTabButton("Auto Buy", "shop", 0.5, 2)
+local AutoBuyBtn, SetAutoBuyActive = CreateTabButton("Auto Buy", "shop", 1/3, 2)
+local ServerBtn, SetServerActive = CreateTabButton("Server", "server", 2/3, 2)
 
 local ContentArea = Instance.new("Frame", MainFrame)
 ContentArea.Size = UDim2.new(1, -24, 1, -118)
@@ -1363,16 +1380,227 @@ for i, pk in ipairs(PICKAXE_DB) do
     end)
 end
 
+-- ── TAB SERVER (JOB ID) ─────────────────────────────────
+local TeleportService = game:GetService("TeleportService")
+
+local function CreateActionButton(parent, text, iconKey, filled)
+    local fg = filled and Colors.OnAccent or Colors.Accent
+    local Btn = Instance.new("TextButton")
+    Btn.AutoButtonColor = false
+    Btn.Text = ""
+    Btn.BackgroundColor3 = filled and Colors.Accent or Colors.ChipOn
+    Btn.Parent = parent
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 10)
+    local Stroke = Instance.new("UIStroke", Btn)
+    Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    Stroke.Thickness = 1
+    Stroke.Color = filled and Colors.Accent or Colors.Border
+
+    local Row = Instance.new("Frame", Btn)
+    Row.Size = UDim2.new(1, 0, 1, 0)
+    Row.BackgroundTransparency = 1
+    local Lay = Instance.new("UIListLayout", Row)
+    Lay.FillDirection = Enum.FillDirection.Horizontal
+    Lay.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    Lay.VerticalAlignment = Enum.VerticalAlignment.Center
+    Lay.SortOrder = Enum.SortOrder.LayoutOrder
+    Lay.Padding = UDim.new(0, 6)
+
+    local Ic = MakeIcon(Row, iconKey, 14, fg)
+    Ic.LayoutOrder = 1
+    local Lbl = NewLabel(Row, text, 12, Enum.Font.GothamMedium, fg, Enum.TextXAlignment.Center)
+    Lbl.AutomaticSize = Enum.AutomaticSize.X
+    Lbl.Size = UDim2.new(0, 0, 1, 0)
+    Lbl.LayoutOrder = 2
+
+    Btn.MouseEnter:Connect(function()
+        TweenService:Create(Btn, TweenInfo.new(0.15), {BackgroundTransparency = 0.15}):Play()
+    end)
+    Btn.MouseLeave:Connect(function()
+        TweenService:Create(Btn, TweenInfo.new(0.15), {BackgroundTransparency = 0}):Play()
+    end)
+    return Btn, Lbl
+end
+
+local ServerTab = Instance.new("Frame", ContentArea)
+ServerTab.Size = UDim2.new(1, 0, 1, 0)
+ServerTab.BackgroundTransparency = 1
+ServerTab.Visible = false
+
+-- Kartu: Job ID server ini + tombol salin
+local currentJobId = game.JobId
+
+local JobCard = Instance.new("Frame", ServerTab)
+JobCard.Size = UDim2.new(1, 0, 0, 48)
+JobCard.BackgroundColor3 = Colors.GlassPanel
+Instance.new("UICorner", JobCard).CornerRadius = UDim.new(0, 10)
+
+local JobCap = NewLabel(JobCard, "Job ID server ini", 10, Enum.Font.Gotham, Colors.TextDim)
+JobCap.Size = UDim2.new(1, -96, 0, 14)
+JobCap.Position = UDim2.new(0, 10, 0, 6)
+
+local JobValue = NewLabel(JobCard, currentJobId ~= "" and currentJobId or "Tidak tersedia", 10, Enum.Font.Code, Colors.Text)
+JobValue.Size = UDim2.new(1, -96, 0, 16)
+JobValue.Position = UDim2.new(0, 10, 0, 22)
+JobValue.TextTruncate = Enum.TextTruncate.AtEnd
+
+local CopyBtn, CopyLbl = CreateActionButton(JobCard, "Salin", "copy", false)
+CopyBtn.Size = UDim2.new(0, 70, 0, 30)
+CopyBtn.AnchorPoint = Vector2.new(1, 0.5)
+CopyBtn.Position = UDim2.new(1, -9, 0.5, 0)
+
+CopyBtn.MouseButton1Click:Connect(function()
+    if currentJobId == "" then
+        showNotif("GAGAL SALIN", "Job ID tidak tersedia di server ini.", 4)
+        return
+    end
+    print("Job ID: " .. currentJobId)
+    local clip = setclipboard or toclipboard
+    local ok = clip and pcall(clip, currentJobId)
+    if ok then
+        CopyLbl.Text = "Tersalin"
+        showNotif("JOB ID TERSALIN", currentJobId, 4)
+        task.delay(1.5, function()
+            if CopyLbl.Parent then CopyLbl.Text = "Salin" end
+        end)
+    else
+        showNotif("GAGAL SALIN", "Executor tidak mendukung clipboard. Job ID ada di console.", 5)
+    end
+end)
+
+-- Input Job ID + tombol join
+local JoinCap = NewLabel(ServerTab, "Join server dengan Job ID", 10, Enum.Font.Gotham, Colors.TextDim)
+JoinCap.Size = UDim2.new(1, 0, 0, 14)
+JoinCap.Position = UDim2.new(0, 2, 0, 58)
+
+local InputWrap = Instance.new("Frame", ServerTab)
+InputWrap.Size = UDim2.new(1, 0, 0, 34)
+InputWrap.Position = UDim2.new(0, 0, 0, 76)
+InputWrap.BackgroundColor3 = Colors.GlassPanel
+Instance.new("UICorner", InputWrap).CornerRadius = UDim.new(0, 10)
+local InputStroke = Instance.new("UIStroke", InputWrap)
+InputStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+InputStroke.Thickness = 1
+InputStroke.Color = Colors.Border
+
+local JobInput = Instance.new("TextBox", InputWrap)
+JobInput.Size = UDim2.new(1, -20, 1, 0)
+JobInput.Position = UDim2.new(0, 10, 0, 0)
+JobInput.BackgroundTransparency = 1
+JobInput.Font = Enum.Font.Code
+JobInput.TextSize = 11
+JobInput.TextColor3 = Colors.Text
+JobInput.TextXAlignment = Enum.TextXAlignment.Left
+JobInput.PlaceholderText = "Tempel Job ID di sini"
+JobInput.PlaceholderColor3 = Colors.TextDim
+JobInput.Text = ""
+JobInput.ClearTextOnFocus = false
+
+local JoinBtn, JoinLbl = CreateActionButton(ServerTab, "Join server", "login", true)
+JoinBtn.Size = UDim2.new(1, 0, 0, 34)
+JoinBtn.Position = UDim2.new(0, 0, 0, 118)
+
+local JoinStatus = NewLabel(ServerTab, "Masukkan Job ID lalu tekan Join.", 10, Enum.Font.Gotham, Colors.TextDim, Enum.TextXAlignment.Center)
+JoinStatus.Size = UDim2.new(1, 0, 0, 28)
+JoinStatus.Position = UDim2.new(0, 0, 0, 158)
+JoinStatus.TextWrapped = true
+JoinStatus.TextYAlignment = Enum.TextYAlignment.Top
+
+local isJoining = false
+
+local function setJoinStatus(text, color)
+    JoinStatus.Text = text
+    JoinStatus.TextColor3 = color or Colors.TextDim
+end
+
+local function resetJoinButton()
+    isJoining = false
+    JoinLbl.Text = "Join server"
+end
+
+local function isValidJobId(s)
+    return #s == 36 and s:match("^%x+%-%x+%-%x+%-%x+%-%x+$") ~= nil
+end
+
+local function doJoin()
+    if isJoining then return end
+
+    local id = (JobInput.Text:gsub("[%s\"']", ""))
+    if id == "" then
+        setJoinStatus("Job ID masih kosong.", Colors.Danger)
+        return
+    end
+    if not isValidJobId(id) then
+        setJoinStatus("Format Job ID tidak valid.", Colors.Danger)
+        return
+    end
+    if id == game.JobId then
+        setJoinStatus("Kamu sudah ada di server ini.", Colors.Amber)
+        return
+    end
+
+    isJoining = true
+    JoinLbl.Text = "Menghubungkan..."
+    setJoinStatus("Mengirim permintaan teleport...", Colors.Accent)
+    showNotif("MENGHUBUNGKAN KE SERVER", "Job ID: " .. id:sub(1, 8) .. "...", 4)
+
+    local ok, err = pcall(function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, id, player)
+    end)
+
+    if not ok then
+        resetJoinButton()
+        setJoinStatus("Gagal: " .. tostring(err), Colors.Danger)
+        showNotif("GAGAL JOIN", tostring(err), 6)
+        return
+    end
+
+    task.delay(15, function()
+        if isJoining then
+            resetJoinButton()
+            setJoinStatus("Tidak ada respons. Coba lagi.", Colors.Amber)
+        end
+    end)
+end
+
+JoinBtn.MouseButton1Click:Connect(doJoin)
+
+JobInput.Focused:Connect(function()
+    TweenService:Create(InputStroke, TweenInfo.new(0.15), {Color = Colors.Accent}):Play()
+end)
+JobInput.FocusLost:Connect(function(enterPressed)
+    TweenService:Create(InputStroke, TweenInfo.new(0.15), {Color = Colors.Border}):Play()
+    if enterPressed then doJoin() end
+end)
+
+-- Error teleport dari Roblox (server penuh, tidak ditemukan, dll.)
+local teleportFailConn = TeleportService.TeleportInitFailed:Connect(function(plr, result, msg)
+    if plr ~= player then return end
+    resetJoinButton()
+    local reason = tostring(msg or result)
+    setJoinStatus("Gagal join: " .. reason, Colors.Danger)
+    showNotif("GAGAL JOIN", reason, 6)
+end)
+ScreenGui.Destroying:Connect(function() teleportFailConn:Disconnect() end)
+
 -- ── Navigasi tab ────────────────────────────────────────
-HomeBtn.MouseButton1Click:Connect(function() 
-    SetHomeActive(true); SetAutoBuyActive(false)
-    HomeTab.Visible = true; AutoBuyTab.Visible = false
-end)
-AutoBuyBtn.MouseButton1Click:Connect(function() 
-    SetHomeActive(false); SetAutoBuyActive(true)
-    HomeTab.Visible = false; AutoBuyTab.Visible = true
-end)
-SetHomeActive(true)
+local TabPages = {
+    { btn = HomeBtn,    set = SetHomeActive,    page = HomeTab },
+    { btn = AutoBuyBtn, set = SetAutoBuyActive, page = AutoBuyTab },
+    { btn = ServerBtn,  set = SetServerActive,  page = ServerTab },
+}
+
+local function SwitchTab(idx)
+    for i, t in ipairs(TabPages) do
+        t.set(i == idx)
+        t.page.Visible = (i == idx)
+    end
+end
+
+for i, t in ipairs(TabPages) do
+    t.btn.MouseButton1Click:Connect(function() SwitchTab(i) end)
+end
+SwitchTab(1)
 
 -- ── Tombol mengambang ────────────────────
 local FloatingBtn = Instance.new("ImageButton", ScreenGui)
