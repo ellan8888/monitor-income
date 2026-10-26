@@ -43,7 +43,7 @@ if not httpFn then warn("❌ Nggak ada fungsi request!"); return end
 -- ═══════════════════════════════════════════════════════
 local MASTER_CONFIG = {
     -- Format: ["Nama Pickaxe"] = { income = Angka, speed = Angka }
-    ["Haunted Pickaxe"] = { income = 5e12, speed = 2.5e12 },
+    ["Haunted Pickaxe"] = { income = 5e12, speed = 2e12 },
     ["Enchanted Pickaxe"] = { income = 2e12, speed = 1e12 },  -- 2T Income, 1T Speed
     ["Celestial Pickaxe"] = { income = 1e12, speed = 500e9 }, -- 1T Income, 500B Speed
     
