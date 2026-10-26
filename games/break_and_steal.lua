@@ -162,8 +162,10 @@ local function SyncConfigDB()
     })
 
     -- 2. PROSES ANTREAN MAX ACC & CLONE-NYA
+    -- 2. PROSES ANTREAN MAX ACC & CLONE-NYA
     local latestIndex = #PICKAXE_DB
-    
+    local GALAXY_ID = 17  -- ⭐ tambahkan ini
+
     if latestIndex > 20 then
         local newPickaxesCount = latestIndex - 20
         
@@ -177,7 +179,10 @@ local function SyncConfigDB()
                 amount = cfgClone.income, 
                 targetSpeed = cfgClone.speed, 
                 pickaxeId = pkClone.id, pickaxeName = pkClone.name, pickaxePrice = pkClone.priceRaw, 
-                prereqId = PICKAXE_DB[cloneIdx-1].id, prereqName = PICKAXE_DB[cloneIdx-1].name, prereqPrice = PICKAXE_DB[cloneIdx-1].priceRaw
+                -- ⭐ FIX: prereq selalu Galaxy
+                prereqId = PICKAXE_DB[GALAXY_ID].id, 
+                prereqName = PICKAXE_DB[GALAXY_ID].name, 
+                prereqPrice = PICKAXE_DB[GALAXY_ID].priceRaw
             })
         end
 
@@ -189,7 +194,10 @@ local function SyncConfigDB()
             amount = cfgNew.income, 
             targetSpeed = cfgNew.speed, 
             pickaxeId = newPk.id, pickaxeName = newPk.name, pickaxePrice = newPk.priceRaw, 
-            prereqId = PICKAXE_DB[latestIndex-1].id, prereqName = PICKAXE_DB[latestIndex-1].name, prereqPrice = PICKAXE_DB[latestIndex-1].priceRaw
+            -- ⭐ FIX: prereq selalu Galaxy, BUKAN pickaxe sebelumnya
+            prereqId = PICKAXE_DB[GALAXY_ID].id, 
+            prereqName = PICKAXE_DB[GALAXY_ID].name, 
+            prereqPrice = PICKAXE_DB[GALAXY_ID].priceRaw
         })
     else
         local maxPk = PICKAXE_DB[targetIdx20]
@@ -199,7 +207,10 @@ local function SyncConfigDB()
             name = "Max Account (Income " .. formatNumberAuto(cfgMax.income) .. ")", 
             amount = cfgMax.income, targetSpeed = cfgMax.speed,
             pickaxeId = maxPk.id, pickaxeName = maxPk.name, pickaxePrice = maxPk.priceRaw,
-            prereqId = PICKAXE_DB[targetIdx20-1].id, prereqName = PICKAXE_DB[targetIdx20-1].name, prereqPrice = PICKAXE_DB[targetIdx20-1].priceRaw
+            -- ⭐ FIX juga di sini
+            prereqId = PICKAXE_DB[GALAXY_ID].id, 
+            prereqName = PICKAXE_DB[GALAXY_ID].name, 
+            prereqPrice = PICKAXE_DB[GALAXY_ID].priceRaw
         })
     end
 end
