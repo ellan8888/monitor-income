@@ -132,11 +132,48 @@ local function LoadPickaxeDB()
         end
         print("✅ [Auto-Detect] Berhasil load " .. #PICKAXE_DB .. " pickaxe dari game!")
     else
-        warn("❌ Gagal load PickaxeConfig!")
+        warn("❌ Gagal load PickaxeConfig! Pakai Fallback Manual.")
+        
+        -- ⭐ FALLBACK MANUAL (BIAR UI TETAP MUNCUL)
+        local fallbackData = {
+            {name = "Wooden Pickaxe", price = 0},
+            {name = "Stone Pickaxe", price = 80},
+            {name = "Iron Pickaxe", price = 800},
+            {name = "Golden Pickaxe", price = 20000},
+            {name = "Diamond Pickaxe", price = 160000},
+            {name = "Strawberry Pickaxe", price = 1200000},
+            {name = "Cactus Pickaxe", price = 6000000},
+            {name = "Lightning Pickaxe", price = 40000000},
+            {name = "Candy Pickaxe", price = 400000000},
+            {name = "Rainbow Pickaxe", price = 2800000000},
+            {name = "Crystal Pickaxe", price = 20000000000},
+            {name = "Demon Pickaxe", price = 120000000000},
+            {name = "Hacker Pickaxe", price = 1200000000000},
+            {name = "UFO Pickaxe", price = 12000000000000},
+            {name = "Secret Pickaxe", price = 8e13},
+            {name = "Cool Pickaxe", price = 6e14},
+            {name = "Galaxy Pickaxe", price = 4e15},
+            {name = "Celestial Pickaxe", price = 2e16},
+            {name = "Sci Fi Pickaxe", price = 7.5e16},
+            {name = "Enchanted Pickaxe", price = 2e17},
+            {name = "Haunted Pickaxe", price = 1e18},
+        }
+        
+        for i, data in ipairs(fallbackData) do
+            table.insert(PICKAXE_DB, {
+                name = data.name,
+                id = i,
+                priceRaw = data.price,
+                priceStr = "$" .. formatNumberAuto(data.price)
+            })
+        end
     end
 end
+
+task.wait(2) -- ⭐ Tunggu game load
 LoadPickaxeDB()
 
+-- ⭐ SINKRONISASI PROFIL (AUTO-CLONE DENGAN MASTER CONFIG)
 -- ⭐ SINKRONISASI PROFIL (AUTO-CLONE DENGAN MASTER CONFIG)
 local CONFIG_DB = {}
 
@@ -144,31 +181,49 @@ local function SyncConfigDB()
     CONFIG_DB = {} 
     if #PICKAXE_DB == 0 then return end
 
-    local targetIdx20, targetIdx18
-    for i, pk in ipairs(PICKAXE_DB) do
-        if pk.id == 20 then targetIdx20 = i end
-        if pk.id == 18 then targetIdx18 = i end
+    -- Helper cari index berdasarkan nama pickaxe (Anti-Gagal)
+    local function findIdx(nameToFind)
+        for i, pk in ipairs(PICKAXE_DB) do
+            if string.find(string.lower(pk.name), string.lower(nameToFind)) then
+                return i
+            end
+        end
+        return nil
     end
 
-    -- 1. SETUP PROFIL STATIS (Income 1T tetap Celestial)
-    local pk18 = PICKAXE_DB[targetIdx18] or PICKAXE_DB[18]
+    local idxEnchanted = findIdx("Enchanted")
+    local idxCelestial = findIdx("Celestial")
+    local idxGalaxy = findIdx("Galaxy")
+
+    -- Fallback kalau nama pickaxe nggak ketemu (tetap jalan pakai index 20/18/17)
+    idxEnchanted = idxEnchanted or 20
+    idxCelestial = idxCelestial or 18
+    idxGalaxy = idxGalaxy or 17
+
+    -- Pastikan index nggak out of bounds
+    if idxEnchanted > #PICKAXE_DB then idxEnchanted = #PICKAXE_DB end
+    if idxCelestial > #PICKAXE_DB then idxCelestial = #PICKAXE_DB end
+    if idxGalaxy > #PICKAXE_DB then idxGalaxy = #PICKAXE_DB end
+
+    -- 1. SETUP PROFIL STATIS (Income 1T - Celestial)
+    local pk18 = PICKAXE_DB[idxCelestial] or PICKAXE_DB[#PICKAXE_DB]
     local cfg18 = MASTER_CONFIG[pk18.name] or { income = 1e12, speed = 500e9 }
     
     table.insert(CONFIG_DB, {
         name = "Akun Income 1T", 
         amount = cfg18.income, targetSpeed = cfg18.speed,
         pickaxeId = pk18.id, pickaxeName = pk18.name, pickaxePrice = pk18.priceRaw,
-        prereqId = PICKAXE_DB[17].id, prereqName = PICKAXE_DB[17].name, prereqPrice = PICKAXE_DB[17].priceRaw
+        prereqId = PICKAXE_DB[idxGalaxy].id, prereqName = PICKAXE_DB[idxGalaxy].name, prereqPrice = PICKAXE_DB[idxGalaxy].priceRaw
     })
 
     -- 2. PROSES ANTREAN MAX ACC & CLONE-NYA
     local latestIndex = #PICKAXE_DB
     
-    if latestIndex > 20 then
-        local newPickaxesCount = latestIndex - 20
+    if latestIndex > idxEnchanted then
+        local newPickaxesCount = latestIndex - idxEnchanted
         
         for i = 1, newPickaxesCount do
-            local cloneIdx = 20 + (i - 1) 
+            local cloneIdx = idxEnchanted + (i - 1) 
             local pkClone = PICKAXE_DB[cloneIdx]
             local cfgClone = MASTER_CONFIG[pkClone.name] or { income = DEFAULT_INCOME, speed = DEFAULT_SPEED }
             
@@ -192,14 +247,14 @@ local function SyncConfigDB()
             prereqId = PICKAXE_DB[latestIndex-1].id, prereqName = PICKAXE_DB[latestIndex-1].name, prereqPrice = PICKAXE_DB[latestIndex-1].priceRaw
         })
     else
-        local maxPk = PICKAXE_DB[targetIdx20]
+        local maxPk = PICKAXE_DB[idxEnchanted]
         local cfgMax = MASTER_CONFIG[maxPk.name] or { income = DEFAULT_INCOME, speed = DEFAULT_SPEED }
         
         table.insert(CONFIG_DB, {
             name = "Max Account (Income " .. formatNumberAuto(cfgMax.income) .. ")", 
             amount = cfgMax.income, targetSpeed = cfgMax.speed,
             pickaxeId = maxPk.id, pickaxeName = maxPk.name, pickaxePrice = maxPk.priceRaw,
-            prereqId = PICKAXE_DB[targetIdx20-1].id, prereqName = PICKAXE_DB[targetIdx20-1].name, prereqPrice = PICKAXE_DB[targetIdx20-1].priceRaw
+            prereqId = PICKAXE_DB[idxEnchanted-1].id, prereqName = PICKAXE_DB[idxEnchanted-1].name, prereqPrice = PICKAXE_DB[idxEnchanted-1].priceRaw
         })
     end
 end
