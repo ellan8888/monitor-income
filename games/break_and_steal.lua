@@ -76,6 +76,7 @@ local IDLE_MOVE_TH     = 2       -- stud, dianggap gerak kalau geser > ini
 local idleLastPos      = nil
 local idleTimeAccum    = 0
 local isRespawningIdle = false
+local isAutoRespawnLocked = false   -- ⭐ true saat monitor aktif
 
 -- ⭐ STATE AUTO BUY
 local autoBuyEnabled = false
@@ -539,8 +540,7 @@ end
 
 -- ⭐ AUTO RESPAWN IF IDLE (hanya jalan saat monitor / auto buy aktif)
 local function tickIdleRespawn()
-    -- hanya aktif kalau monitor / auto buy nyala
-    if not isAutoRespawnIdle then return end
+    if not isAutoRespawnIdle and not isAutoRespawnLocked then return end
     if not (is_monitoring or autoBuyEnabled) then
         idleLastPos = nil
         idleTimeAccum = 0
@@ -1049,7 +1049,7 @@ local CHIP_W, CHIP_H, CHIP_GAP = 101, 32, 6
 local CHIP_COLS = 3          -- chip per baris
 local CHIP_MAX_ROWS = 2      -- baris maksimal sebelum area chip jadi scroll
 
-local chipCount = #CONFIG_DB + 1                     -- +1 untuk tombol Auto Jump
+local chipCount = #CONFIG_DB + 2   -- +2: Auto Jump & Auto Respawn
 local chipRows = math.ceil(chipCount / CHIP_COLS)
 local chipVisibleRows = math.min(chipRows, CHIP_MAX_ROWS)
 local chipsHeight = chipVisibleRows * CHIP_H + (chipVisibleRows - 1) * CHIP_GAP
@@ -1231,6 +1231,27 @@ local function CreateChipToggle(parent, text, iconKey, layoutOrder, defaultState
     }
 end
 
+-- ⭐ bikin chip kelihatan "locked" (ikon gembok + tidak bisa diklik)
+local function SetChipLocked(chipObj, locked)
+    local btn = chipObj.SwitchBg
+    local lbl = btn:FindFirstChildWhichIsA("TextLabel")
+    local ic  = btn:FindFirstChildWhichIsA("Frame")   -- icon root
+    if not lbl then return end
+
+    if locked then
+        -- simpan teks asli
+        if not chipObj._origText then chipObj._origText = lbl.Text end
+        lbl.Text = chipObj._origText .. " 🔒"
+        lbl.TextColor3 = Colors.Accent
+        btn.BackgroundColor3 = Colors.ChipOn
+    else
+        if chipObj._origText then lbl.Text = chipObj._origText end
+        lbl.TextColor3 = (chipObj.GetState() and Colors.Accent or Colors.TextDim)
+        btn.BackgroundColor3 = (chipObj.GetState() and Colors.ChipOn or Colors.GlassPanel)
+    end
+    chipObj._locked = locked
+end
+
 -- ── TAB MONITOR ─────────────────────────────────────────
 local HomeTab = Instance.new("Frame", ContentArea)
 HomeTab.Size = UDim2.new(1, 0, 1, 0)
@@ -1365,6 +1386,7 @@ ChipsLayout.CellPadding = UDim2.new(0, CHIP_GAP, 0, CHIP_GAP)
 local monitorToggles = {}
 local toggleCallbacks = {}
 
+local autoRespawnToggle = nil 
 for i, cfg in ipairs(CONFIG_DB) do
     local toggleObj = CreateChipToggle(ChipsRow, getShortName(cfg.name), (cfg.amount >= 2e12) and "crown" or "target", i, false)
     local function callbackFn(state)
@@ -1385,6 +1407,12 @@ for i, cfg in ipairs(CONFIG_DB) do
             prereqName = cfg.prereqName or "Galaxy"
             prereqId = cfg.prereqId or 17
             prereqPrice = cfg.prereqPrice or 4e15
+            isAutoRespawnLocked = true
+            isAutoRespawnIdle = true        -- paksa ON
+            if autoRespawnToggle then
+                autoRespawnToggle.SetState(true)
+                SetChipLocked(autoRespawnToggle, true)   -- ⭐ visual lock
+            end
             if cfg.pickaxeId then
                 targetPickaxeName = cfg.pickaxeName
                 targetPickaxeId = cfg.pickaxeId
@@ -1405,6 +1433,10 @@ for i, cfg in ipairs(CONFIG_DB) do
             idleLastPos = nil
             idleTimeAccum = 0
             isRespawningIdle = false
+            isAutoRespawnLocked = false
+            if autoRespawnToggle then
+                SetChipLocked(autoRespawnToggle, false)  -- ⭐ unlock
+            end
         end
     end
     toggleCallbacks[i] = callbackFn
@@ -1425,6 +1457,18 @@ autoJumpToggle.SwitchBg.MouseButton1Click:Connect(function()
     local newState = not autoJumpToggle.GetState()
     autoJumpToggle.SetState(newState)
     isAutoJumpEnabled = newState
+end)
+
+autoRespawnToggle = CreateChipToggle(ChipsRow, "Auto Respawn", "hourglass", 9998, true)
+autoRespawnToggle.SwitchBg.MouseButton1Click:Connect(function()
+    -- kalau monitor aktif, chip dikunci → tidak bisa dimatikan
+    if isAutoRespawnLocked then
+        showNotif("🔒 TERKUNCI", "Auto Respawn dikunci saat Monitor aktif", 3)
+        return
+    end
+    local newState = not autoRespawnToggle.GetState()
+    autoRespawnToggle.SetState(newState)
+    isAutoRespawnIdle = newState
 end)
 
 local StatusLbl = NewLabel(HomeTab, "Status: Pilih target monitor.", 10, Enum.Font.Gotham, Colors.TextDim, Enum.TextXAlignment.Center)
