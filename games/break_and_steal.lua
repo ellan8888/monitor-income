@@ -78,6 +78,10 @@ local idleTimeAccum    = 0
 local isRespawningIdle = false
 local isAutoRespawnLocked = false   -- ⭐ true saat monitor aktif
 
+local lastSpeedSeen = 0
+local lastSpeedIncreaseTime = 0
+local TREADMILL_GRACE = 10   -- detik: speed naik dalam rentang ini = lagi treadmill
+
 -- ⭐ STATE AUTO BUY
 local autoBuyEnabled = false
 local targetPickaxeName = "Kapak Ajaib" 
@@ -538,10 +542,35 @@ local function startAutoFarm()
     showNotif("🚀 AUTO FARM", "Auto Farm dinyalakan lagi!", 5)
 end
 
+-- ⭐ DETEKSI TREADMILL: speed naik = karakter lagi aktif (jangan respawn)
+local function getRawSpeed()
+    local ls = player:FindFirstChild("leaderstats")
+    if ls then
+        for _, stat in ipairs(ls:GetChildren()) do
+            local n = stat.Name:lower()
+            if n:find("speed") or n:find("kecepatan") then
+                local v = tonumber(stat.Value)
+                if v then return v end
+            end
+        end
+    end
+    return nil
+end
+
+local function updateSpeedActivity(speed_str)
+    local cur = getRawSpeed() or parseNumber(speed_str)
+    if cur > lastSpeedSeen and lastSpeedSeen > 0 then
+        lastSpeedIncreaseTime = os.clock()
+    end
+    lastSpeedSeen = cur
+end
+
 -- ⭐ AUTO RESPAWN IF IDLE (hanya jalan saat monitor / auto buy aktif)
 local function tickIdleRespawn()
     if not isAutoRespawnIdle and not isAutoRespawnLocked then return end
-    if not (is_monitoring or autoBuyEnabled) then
+
+    -- ⭐ toggle sendiri cukup untuk mengaktifkan auto respawn
+    if not (is_monitoring or autoBuyEnabled or isAutoRespawnIdle) then
         idleLastPos = nil
         idleTimeAccum = 0
         isRespawningIdle = false
@@ -564,6 +593,13 @@ local function tickIdleRespawn()
 
     -- kalau sedang proses respawn, tunggu sampai hidup lagi
     if isRespawningIdle then
+        return
+    end
+
+        -- ⭐ speed lagi naik (treadmill) → reset hitungan diam, jangan respawn
+    if (os.clock() - lastSpeedIncreaseTime) < TREADMILL_GRACE then
+        idleTimeAccum = 0
+        idleLastPos = nil
         return
     end
 
@@ -1785,6 +1821,7 @@ task.spawn(function()
 
         local money_str, speed_str = getMyData()
         local money_num = parseNumber(money_str)
+        updateSpeedActivity(speed_str)
         
         if is_monitoring then
             StatusLbl.Text = "Memantau: " .. tostring(activeProfileName) .. " (" .. tostring(money_str) .. " / " .. tostring(formatNumber(targetIncome)) .. ")"
