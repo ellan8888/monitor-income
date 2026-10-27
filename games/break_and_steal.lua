@@ -85,6 +85,7 @@ local targetBuyPrice = 2000 * 1e15
 local buyStatus = "None"
 local hasCheckedOwnership = false
 local hasCheckedTarget = false 
+local lastTargetProbe = 0
 local prereqName = "Galaxy"
 local prereqId = 17
 local prereqPrice = 4 * 1e15
@@ -272,35 +273,88 @@ local function getPickaxeName()
     return lastKnownPickaxe
 end
 
+-- ⭐ STATE EQUIP: kapak terbaik yang PASTI dimiliki
+local ownedBestId = nil
+
+local function norm(s) return string.lower(tostring(s or "")) end
+
+local function equipPickaxe(id)
+    local Event = ReplicatedStorage:FindFirstChild("PickaxeShopRequest")
+    if Event and id then pcall(function() Event:FireServer("Equip", id) end) end
+end
+
+local function toolTip(tool)
+    local tip = ""
+    pcall(function() tip = tool.ToolTip end)
+    return norm(tip)
+end
+
+-- cocokkan tool ke ID pickaxe: exact match dulu, lalu nama TERPANJANG yang
+-- terkandung di tool (bukan sebaliknya, supaya "pickaxe" tidak match Wood)
+local function resolvePickaxeId(tool)
+    if not tool then return nil end
+    local cands = { toolTip(tool), norm(tool.Name) }
+    for _, c in ipairs(cands) do
+        if c ~= "" then
+            for _, pk in ipairs(PICKAXE_DB) do
+                if norm(pk.name) == c then return pk.id end
+            end
+        end
+    end
+    local bestId, bestLen = nil, 0
+    for _, c in ipairs(cands) do
+        for _, pk in ipairs(PICKAXE_DB) do
+            local n = norm(pk.name)
+            if #n > bestLen and string.find(c, n, 1, true) then
+                bestId, bestLen = pk.id, #n
+            end
+        end
+    end
+    return bestId
+end
+
+local function toolMatches(tool, targetName)
+    local t = norm(targetName)
+    return string.find(norm(tool.Name), t, 1, true) ~= nil
+        or string.find(toolTip(tool), t, 1, true) ~= nil
+end
+
 local function checkOwnershipSilent(targetName, targetId)
     local char = player.Character
     if not char then return false end
-    local currentlyHeld = char:FindFirstChildWhichIsA("Tool")
-    local heldName = currentlyHeld and currentlyHeld.Name or nil
     local Event = ReplicatedStorage:FindFirstChild("PickaxeShopRequest")
     if not Event then return false end
-    
+
+    -- sudah dipegang? tidak perlu probe sama sekali
+    local currentTool = char:FindFirstChildWhichIsA("Tool")
+    if currentTool and toolMatches(currentTool, targetName) then
+        ownedBestId = math.max(ownedBestId or 0, targetId)
+        return true
+    end
+
+    local previousId = resolvePickaxeId(currentTool)
+        if previousId then ownedBestId = math.max(ownedBestId or 0, previousId) end
+
     Event:FireServer("Equip", targetId)
-    task.wait(0.5) 
-    
+    task.wait(0.6)
+
     local hasTarget = false
-    for _, tool in ipairs(char:GetChildren()) do
-        if tool:IsA("Tool") then
-            local tooltip = ""
-            local success, res = pcall(function() return tool.ToolTip end)
-            if success and res then tooltip = string.lower(res) end
-            if string.find(string.lower(tool.Name), string.lower(targetName)) or string.find(tooltip, string.lower(targetName)) then
+    local c2 = player.Character
+    if c2 then
+        for _, tool in ipairs(c2:GetChildren()) do
+            if tool:IsA("Tool") and toolMatches(tool, targetName) then
                 hasTarget = true
                 break
             end
         end
     end
-    if not hasTarget and heldName then
-        local oldId = nil
-        for _, pk in ipairs(PICKAXE_DB) do
-            if string.find(string.lower(pk.name), string.lower(heldName)) then oldId = pk.id; break end
-        end
-        if oldId then Event:FireServer("Equip", oldId) end
+
+    if hasTarget then ownedBestId = math.max(ownedBestId or 0, targetId) end
+
+    -- selalu kembalikan ke kapak terbaik yang pasti dimiliki (bukan tebakan nama)
+    local restoreId = ownedBestId or previousId
+    if restoreId and not (hasTarget and restoreId == targetId) then
+        equipPickaxe(restoreId)
     end
     return hasTarget
 end
@@ -579,6 +633,7 @@ local function tryBuyPickaxe()
                     Event:FireServer("Buy", prereqId)
                     task.wait(1)
                     Event:FireServer("Equip", prereqId)
+                    ownedBestId = math.max(ownedBestId or 0, prereqId)
                     showNotif("🛒 BELI PREREQ", "Berhasil beli " .. prereqName .. "!", 5)
                     hasCheckedOwnership = false 
                 end
@@ -594,18 +649,27 @@ local function tryBuyPickaxe()
     end
 
     if not hasCheckedTarget then
+        hasCheckedTarget = true  -- probe awal cukup sekali
         if checkOwnershipSilent(targetPickaxeName, targetPickaxeId) then
             autoBuyEnabled = false
             buyStatus = "✅ " .. string.upper(targetPickaxeName) .. " SUDAH DIMILIKI!"
-            hasCheckedTarget = true
             return
         end
-        -- ⭐ FIX: Baris hasCheckedTarget dihapus dari sini biar re-cek
     end
 
     if currentMoney < targetBuyPrice then
         buyStatus = "⏳ NUNGGU UANG " .. targetPickaxeName .. ": (" .. money_str .. " / " .. formatNumber(targetBuyPrice) .. ")"
         return
+    end
+
+    -- uang cukup: cek ulang kepemilikan, dibatasi 20 detik sekali
+    if (os.time() - (lastTargetProbe or 0)) >= 20 then
+        lastTargetProbe = os.time()
+        if checkOwnershipSilent(targetPickaxeName, targetPickaxeId) then
+            autoBuyEnabled = false
+            buyStatus = "✅ " .. string.upper(targetPickaxeName) .. " SUDAH DIMILIKI!"
+            return
+        end
     end
     
     buyStatus = "⚡ MEMBELI " .. string.upper(targetPickaxeName) .. "..."
@@ -631,6 +695,8 @@ local function tryBuyPickaxe()
             is_income_done = false 
             is_buying_pickaxe = false
         end
+
+        ownedBestId = math.max(ownedBestId or 0, targetPickaxeId)
         
         task.wait(1)
         pcall(function()
@@ -1478,6 +1544,8 @@ for i, pk in ipairs(PICKAXE_DB) do
         targetBuyPrice = pk.priceRaw
         autoBuyEnabled = true
         hasCheckedOwnership = false
+        hasCheckedTarget = false
+        lastTargetProbe = 0
         buyStatus = "Siap beli (ID: "..pk.id..")"
         showNotif("🛒 AUTO BUY AKTIF", "Menunggu uang cukup untuk " .. pk.name, 5)
         PaintPickaxeRows()
