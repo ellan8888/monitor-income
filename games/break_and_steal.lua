@@ -759,6 +759,15 @@ NotifLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
 NotifLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
 NotifLayout.Padding = UDim.new(0, 8)
 
+local NotifScale = Instance.new("UIScale", NotifHolder)
+local function UpdateNotifScale()
+    local vp = ScreenGui.AbsoluteSize
+    if vp.X < 50 then return end
+    NotifScale.Scale = math.clamp(math.min(1, (vp.X - 32) / NOTIF_W, vp.Y / 500), 0.6, 1)
+end
+UpdateNotifScale()
+ScreenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateNotifScale)
+
 local notifOrder = 0
 local activeNotifs = {}
 
@@ -913,6 +922,22 @@ local MainBorder = Instance.new("UIStroke", MainFrame)
 MainBorder.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 MainBorder.Color = Colors.Border
 MainBorder.Thickness = 1
+
+-- ── Auto-scale untuk layar kecil (HP) ───────────────────
+local FRAME_W, FRAME_H = 340, 350 + extraHeight
+local MainScale = Instance.new("UIScale", MainFrame)
+
+local function UpdateScale()
+    local vp = ScreenGui.AbsoluteSize
+    if vp.X < 50 or vp.Y < 50 then
+        local cam = workspace.CurrentCamera
+        vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
+    end
+    local s = math.min(1, (vp.X - 16) / FRAME_W, (vp.Y - 16) / FRAME_H)
+    MainScale.Scale = math.clamp(s, 0.45, 1)
+end
+UpdateScale()
+ScreenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateScale)
 
 -- ── Header ──────────────────────────────────────────────
 local TopBar = Instance.new("Frame", MainFrame)
