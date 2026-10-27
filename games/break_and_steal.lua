@@ -70,6 +70,12 @@ local stuckTimer = 0
 local hasSpeedIncreased = false
 local isAutoJumpEnabled = false
 local lastKnownPickaxe = "None"
+local isAutoRespawnIdle = true   -- ⭐ default ON saat monitor aktif
+local IDLE_TIMEOUT     = 10      -- detik diam sebelum respawn
+local IDLE_MOVE_TH     = 2       -- stud, dianggap gerak kalau geser > ini
+local idleLastPos      = nil
+local idleTimeAccum    = 0
+local isRespawningIdle = false
 
 -- ⭐ STATE AUTO BUY
 local autoBuyEnabled = false
@@ -476,6 +482,81 @@ local function startAutoFarm()
     end
     showNotif("🚀 AUTO FARM", "Auto Farm dinyalakan lagi!", 5)
 end
+
+-- ⭐ AUTO RESPAWN IF IDLE (hanya jalan saat monitor / auto buy aktif)
+local function tickIdleRespawn()
+    -- hanya aktif kalau monitor / auto buy nyala
+    if not isAutoRespawnIdle then return end
+    if not (is_monitoring or autoBuyEnabled) then
+        idleLastPos = nil
+        idleTimeAccum = 0
+        isRespawningIdle = false
+        return
+    end
+
+    local char = player.Character
+    if not char then
+        idleLastPos = nil
+        idleTimeAccum = 0
+        return
+    end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then
+        idleLastPos = nil
+        idleTimeAccum = 0
+        isRespawningIdle = false
+        return
+    end
+
+    -- kalau sedang proses respawn, tunggu sampai hidup lagi
+    if isRespawningIdle then
+        return
+    end
+
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local pos = root.Position
+
+    -- kalau humanoid lagi gerak (misal lagi jalan ke target), reset
+    if hum.MoveDirection.Magnitude > 0.1 then
+        idleTimeAccum = 0
+        idleLastPos = pos
+        return
+    end
+
+    if idleLastPos == nil then
+        idleLastPos = pos
+        idleTimeAccum = 0
+        return
+    end
+
+    local moved = (pos - idleLastPos).Magnitude
+    if moved > IDLE_MOVE_TH then
+        idleTimeAccum = 0
+        idleLastPos = pos
+    else
+        idleTimeAccum = idleTimeAccum + INTERVAL
+        if idleTimeAccum >= IDLE_TIMEOUT then
+            idleTimeAccum = 0
+            idleLastPos = nil
+            isRespawningIdle = true
+            pcall(function() hum.Health = 0 end)
+            task.wait(0.3)
+            if hum.Health > 0 then
+                pcall(function() hum:ChangeState(Enum.HumanoidStateType.Dead) end)
+            end
+            showNotif("♻️ AUTO RESPAWN", "Karakter diam " .. IDLE_TIMEOUT .. "s, respawn!", 4)
+            task.wait(2)
+        end
+    end
+end
+
+-- reset idle state setiap kali karakter baru spawn
+player.CharacterAdded:Connect(function()
+    idleLastPos = nil
+    idleTimeAccum = 0
+    isRespawningIdle = false
+end)
 
 local function onTargetReached()
     is_farm_stopped = true
@@ -1254,6 +1335,10 @@ for i, cfg in ipairs(CONFIG_DB) do
             is_farm_stopped = false
             activeProfileName = "None"
             clearState()
+            -- ⭐ reset idle state biar tidak respawn saat OFF
+            idleLastPos = nil
+            idleTimeAccum = 0
+            isRespawningIdle = false
         end
     end
     toggleCallbacks[i] = callbackFn
@@ -1693,6 +1778,9 @@ task.spawn(function()
             BuyStatusLbl.Text = "Status: Idle (Pilih Kapak)"
             BuyStatusLbl.TextColor3 = Colors.TextDim
         end
+
+                -- ⭐ cek idle respawn tiap tick
+        tickIdleRespawn()
     end
 end)
 
