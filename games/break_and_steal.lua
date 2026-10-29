@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (v36 - UI 3 Tab: Monitor / Auto Buy / Pengaturan)
+-- ✨ V-Ziir0 Hub: Break & Steal (v37 - UI sidebar + kartu: Monitor / Auto Buy / Pengaturan)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ SISTEM ANTI-DOUBLE
@@ -756,30 +756,32 @@ local function tryBuyPickaxe()
 end
 
 -- ═══════════════════════════════════════════════════════
--- ⭐ UI CUSTOM
+-- ⭐ UI CUSTOM (layout sidebar + kartu, tema oranye)
 -- (banyak blok dibungkus do...end supaya tidak melewati batas 200 local)
 -- ═══════════════════════════════════════════════════════
 local Colors = {
-    Background = Color3.fromRGB(15, 26, 34),
-    GlassPanel = Color3.fromRGB(22, 38, 47),
-    Border = Color3.fromRGB(39, 65, 80),
-    Accent = Color3.fromRGB(25, 195, 217),
-    Text = Color3.fromRGB(234, 246, 251),
-    TextDim = Color3.fromRGB(111, 149, 168),
-    SwitchOff = Color3.fromRGB(45, 70, 84),
-    Green = Color3.fromRGB(79, 227, 168),
-    Amber = Color3.fromRGB(245, 194, 107),
-    Danger = Color3.fromRGB(229, 72, 77),
-    Track = Color3.fromRGB(29, 51, 64),
-    OnAccent = Color3.fromRGB(6, 40, 48),
-    ChipOn = Color3.fromRGB(18, 48, 58),
+    Background = Color3.fromRGB(15, 13, 12),
+    Sidebar    = Color3.fromRGB(20, 17, 16),
+    GlassPanel = Color3.fromRGB(22, 19, 18),   -- latar kartu
+    Tile       = Color3.fromRGB(30, 26, 24),   -- latar tile / tombol kecil
+    Border     = Color3.fromRGB(42, 37, 35),
+    Accent     = Color3.fromRGB(240, 122, 43), -- ganti di sini kalau mau warna lain
+    Text       = Color3.fromRGB(241, 236, 232),
+    TextDim    = Color3.fromRGB(141, 131, 125),
+    SwitchOff  = Color3.fromRGB(58, 50, 47),
+    Green      = Color3.fromRGB(79, 227, 168),
+    Amber      = Color3.fromRGB(245, 194, 107),
+    Danger     = Color3.fromRGB(229, 72, 77),
+    Track      = Color3.fromRGB(38, 33, 31),
+    OnAccent   = Color3.fromRGB(43, 18, 4),
+    ChipOn     = Color3.fromRGB(44, 28, 18),
 }
 
 -- isi dengan rbxassetid kalau mau pakai gambar; kosong = digambar dari frame
 local Icons = {
     pickaxe = "", monitor = "", shop = "", target = "", crown = "", jump = "", close = "", minus = "",
     check = "", hourglass = "", bolt = "", checkc = "", xc = "", coin = "",
-    settings = "", lock = "", clock = "", bell = "", trash = "",
+    settings = "", lock = "", clock = "", bell = "", trash = "", chevron = "", user = "",
 }
 
 local IconPaint = setmetatable({}, { __mode = "k" })
@@ -813,7 +815,6 @@ local IconDefs = {
     checkc = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.line(5, 8.2, 7.1, 10.3, 1.5); H.line(7.1, 10.3, 11, 5.8, 1.5) end,
     xc = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.line(5.6, 5.6, 10.4, 10.4, 1.5); H.line(10.4, 5.6, 5.6, 10.4, 1.5) end,
     coin = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.line(8, 4.6, 8, 11.4, 1.6) end,
-    -- ⭐ ikon baru untuk tab Pengaturan
     settings = function(H)
         H.ring(3.5, 3.5, 9, 9, 1.6); H.dot(8, 8, 2.2)
         H.line(8, 0.8, 8, 3, 1.5); H.line(8, 13, 8, 15.2, 1.5)
@@ -826,6 +827,9 @@ local IconDefs = {
         H.line(2.5, 4, 13.5, 4, 1.6); H.line(6.3, 2, 9.7, 2, 1.5)
         H.line(4.5, 5.5, 5.1, 13.5, 1.5); H.line(5.1, 13.5, 10.9, 13.5, 1.5); H.line(10.9, 13.5, 11.5, 5.5, 1.5)
     end,
+    -- ⭐ ikon baru untuk layout sidebar
+    chevron = function(H) H.line(4, 6, 8, 10, 1.6); H.line(8, 10, 12, 6, 1.6) end,
+    user = function(H) H.dot(8, 5, 5); H.rect(3.5, 9.5, 9, 5, 0.5) end,
 }
 
 local function MakeIcon(parent, key, size, color)
@@ -1107,18 +1111,20 @@ do
 end
 
 -- ═══════════ [ FRAME UTAMA ] ═══════════
-local FRAME_W, FRAME_H = 340, 420
+local SIDEBAR_W = 150
+local FRAME_W, FRAME_H = 580, 400
 
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, FRAME_W, 0, FRAME_H) 
+MainFrame.Size = UDim2.new(0, FRAME_W, 0, FRAME_H)
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.BackgroundColor3 = Colors.Background
-MainFrame.BackgroundTransparency = 0.05
+MainFrame.BackgroundTransparency = 0.02
 MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
 MainFrame.Active = true
 MainFrame.Draggable = true
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 16)
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 14)
 do
     local MainBorder = Instance.new("UIStroke", MainFrame)
     MainBorder.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
@@ -1134,110 +1140,375 @@ do
             vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
         end
         local s = math.min(1, (vp.X - 16) / FRAME_W, (vp.Y - 16) / FRAME_H)
-        MainScale.Scale = math.clamp(s, 0.45, 1)
+        MainScale.Scale = math.clamp(s, 0.4, 1)
     end
     UpdateScale()
     ScreenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateScale)
 end
 
--- ── Header ──────────────────────────────────────────────
-local PillDot, PillLbl, MinBtn
-do
-    local TopBar = Instance.new("Frame", MainFrame)
-    TopBar.Size = UDim2.new(1, 0, 0, 34)
-    TopBar.BackgroundTransparency = 1
+-- ═══════════ [ WIDGET KECIL (kartu, tile, saklar, stepper, profil) ] ═══════════
+local UI = {}   -- referensi elemen yang diperbarui dari luar
+local W = {}    -- pabrik widget
 
-    local LogoIcon = MakeIcon(TopBar, "pickaxe", 18, Colors.Accent)
-    LogoIcon.Position = UDim2.new(0, 12, 0.5, -9)
+-- kartu dengan header (klik header = lipat/buka)
+W.Card = function(parent, title, iconKey, bodyH, order)
+    local full = 36 + bodyH + 6
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, full)
+    card.BackgroundColor3 = Colors.GlassPanel
+    card.BorderSizePixel = 0
+    card.LayoutOrder = order
+    card.ClipsDescendants = true
+    card.Parent = parent
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 10)
+    local st = Instance.new("UIStroke", card)
+    st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    st.Thickness = 1
+    st.Color = Colors.Border
 
-    local Title = NewLabel(TopBar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
-    Title.Size = UDim2.new(0, 56, 1, 0)
-    Title.Position = UDim2.new(0, 36, 0, 0)
+    local ic = MakeIcon(card, iconKey, 15, Colors.Accent)
+    ic.Position = UDim2.new(0, 12, 0, 8)
+    local t = NewLabel(card, title, 12, Enum.Font.GothamBold, Colors.Text)
+    t.Size = UDim2.new(0, 110, 0, 30)
+    t.Position = UDim2.new(0, 34, 0, 0)
 
-    local StatusPill = Instance.new("Frame", TopBar)
-    StatusPill.Size = UDim2.new(0, 84, 0, 20)
-    StatusPill.Position = UDim2.new(0, 98, 0.5, -10)
-    StatusPill.BackgroundColor3 = Colors.GlassPanel
-    Instance.new("UICorner", StatusPill).CornerRadius = UDim.new(1, 0)
-    PillDot = Instance.new("Frame", StatusPill)
-    PillDot.Size = UDim2.new(0, 6, 0, 6)
-    PillDot.Position = UDim2.new(0, 9, 0.5, -3)
-    PillDot.BackgroundColor3 = Colors.TextDim
-    Instance.new("UICorner", PillDot).CornerRadius = UDim.new(1, 0)
-    PillLbl = NewLabel(StatusPill, "Idle", 10, Enum.Font.GothamMedium, Colors.TextDim)
-    PillLbl.Size = UDim2.new(1, -22, 1, 0)
-    PillLbl.Position = UDim2.new(0, 20, 0, 0)
+    local chev = MakeIcon(card, "chevron", 14, Colors.TextDim)
+    chev.AnchorPoint = Vector2.new(0.5, 0.5)
+    chev.Position = UDim2.new(1, -19, 0, 15)
 
-    local CloseBtn = Instance.new("TextButton", TopBar)
-    CloseBtn.Size = UDim2.new(0, 26, 0, 26)
-    CloseBtn.Position = UDim2.new(1, -32, 0, 4)
-    CloseBtn.BackgroundTransparency = 1
-    CloseBtn.Text = ""
-    local CloseIcon = MakeIcon(CloseBtn, "close", 14, Colors.TextDim)
-    CloseIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-    CloseIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
-    CloseBtn.MouseEnter:Connect(function() SetIconColor(CloseIcon, Colors.Danger) end)
-    CloseBtn.MouseLeave:Connect(function() SetIconColor(CloseIcon, Colors.TextDim) end)
-    CloseBtn.MouseButton1Click:Connect(function() 
-        ScreenGui:Destroy() 
+    local div = Instance.new("Frame", card)
+    div.Size = UDim2.new(1, -24, 0, 1)
+    div.Position = UDim2.new(0, 12, 0, 30)
+    div.BackgroundColor3 = Colors.Border
+    div.BorderSizePixel = 0
+
+    local body = Instance.new("Frame", card)
+    body.Size = UDim2.new(1, -24, 0, bodyH)
+    body.Position = UDim2.new(0, 12, 0, 36)
+    body.BackgroundTransparency = 1
+
+    local hdr = Instance.new("TextButton", card)
+    hdr.Size = UDim2.new(1, 0, 0, 30)
+    hdr.BackgroundTransparency = 1
+    hdr.Text = ""
+    hdr.ZIndex = 2
+    local collapsed = false
+    hdr.MouseButton1Click:Connect(function()
+        collapsed = not collapsed
+        body.Visible = not collapsed
+        div.Visible = not collapsed
+        chev.Rotation = collapsed and -90 or 0
+        TweenService:Create(card, TweenInfo.new(0.15), { Size = UDim2.new(1, 0, 0, collapsed and 30 or full) }):Play()
     end)
-
-    MinBtn = Instance.new("TextButton", TopBar)
-    MinBtn.Size = UDim2.new(0, 26, 0, 26)
-    MinBtn.Position = UDim2.new(1, -60, 0, 4) 
-    MinBtn.BackgroundTransparency = 1
-    MinBtn.Text = ""
-    local MinIcon = MakeIcon(MinBtn, "minus", 14, Colors.TextDim)
-    MinIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-    MinIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
-    MinBtn.MouseEnter:Connect(function() SetIconColor(MinIcon, Colors.Text) end)
-    MinBtn.MouseLeave:Connect(function() SetIconColor(MinIcon, Colors.TextDim) end)
+    return card, body
 end
 
--- ── Tab bar (3 tab: Monitor / Auto Buy / Pengaturan) ─────
+-- tile angka (nilai besar + keterangan kecil); mengembalikan label nilai
+W.Tile = function(parent, w, order, value, caption)
+    local T = Instance.new("Frame")
+    T.Size = UDim2.new(0, w, 0, 36)
+    T.BackgroundColor3 = Colors.Tile
+    T.BorderSizePixel = 0
+    T.LayoutOrder = order
+    T.Parent = parent
+    Instance.new("UICorner", T).CornerRadius = UDim.new(0, 8)
+    local V = NewLabel(T, value, 13, Enum.Font.GothamBold, Colors.Text)
+    V.Size = UDim2.new(1, -12, 0, 16)
+    V.Position = UDim2.new(0, 6, 0, 4)
+    V.TextScaled = true
+    local c = Instance.new("UITextSizeConstraint", V)
+    c.MaxTextSize = 13
+    c.MinTextSize = 8
+    local C = NewLabel(T, caption, 10, Enum.Font.Gotham, Colors.TextDim)
+    C.Size = UDim2.new(1, -12, 0, 12)
+    C.Position = UDim2.new(0, 6, 0, 21)
+    C.TextTruncate = Enum.TextTruncate.AtEnd
+    return V
+end
+
+-- baris saklar (desc = nil → mode ringkas 26px)
+W.Switch = function(parent, title, desc, iconKey, order, defaultState, bg)
+    local compact = (desc == nil)
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(1, 0, 0, compact and 26 or 44)
+    Btn.BackgroundColor3 = bg or Colors.GlassPanel
+    Btn.AutoButtonColor = false
+    Btn.Text = ""
+    Btn.LayoutOrder = order
+    Btn.Parent = parent
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, compact and 8 or 10)
+    local Stroke = Instance.new("UIStroke", Btn)
+    Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    Stroke.Thickness = 1
+    Stroke.Color = Colors.Border
+
+    local Ic = MakeIcon(Btn, iconKey, 16, Colors.TextDim)
+    Ic.Position = UDim2.new(0, 10, 0.5, -8)
+    local T = NewLabel(Btn, title, 12, Enum.Font.GothamMedium, Colors.Text)
+    T.TextTruncate = Enum.TextTruncate.AtEnd
+    local D
+    if compact then
+        T.Size = UDim2.new(1, -100, 1, 0)
+        T.Position = UDim2.new(0, 34, 0, 0)
+    else
+        T.Size = UDim2.new(1, -100, 0, 16)
+        T.Position = UDim2.new(0, 34, 0, 6)
+        D = NewLabel(Btn, desc, 10, Enum.Font.Gotham, Colors.TextDim)
+        D.Size = UDim2.new(1, -100, 0, 14)
+        D.Position = UDim2.new(0, 34, 0, 23)
+        D.TextTruncate = Enum.TextTruncate.AtEnd
+    end
+
+    local LockIc = MakeIcon(Btn, "lock", 12, Colors.Accent)
+    LockIc.Position = UDim2.new(1, -66, 0.5, -6)
+    LockIc.Visible = false
+
+    local SwTrack = Instance.new("Frame", Btn)
+    SwTrack.Size = UDim2.new(0, 34, 0, 18)
+    SwTrack.Position = UDim2.new(1, -44, 0.5, -9)
+    SwTrack.BackgroundColor3 = Colors.SwitchOff
+    SwTrack.BorderSizePixel = 0
+    Instance.new("UICorner", SwTrack).CornerRadius = UDim.new(1, 0)
+    local Knob = Instance.new("Frame", SwTrack)
+    Knob.Size = UDim2.new(0, 14, 0, 14)
+    Knob.Position = UDim2.new(0, 2, 0.5, -7)
+    Knob.BackgroundColor3 = Colors.Text
+    Knob.BorderSizePixel = 0
+    Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
+
+    local isOn = defaultState
+    local function paint()
+        local info = TweenInfo.new(0.18)
+        TweenService:Create(SwTrack, info, {BackgroundColor3 = isOn and Colors.Accent or Colors.SwitchOff}):Play()
+        TweenService:Create(Knob, info, {Position = isOn and UDim2.new(0, 18, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)}):Play()
+        TweenService:Create(Stroke, info, {Color = isOn and Colors.Accent or Colors.Border}):Play()
+        SetIconColor(Ic, isOn and Colors.Accent or Colors.TextDim)
+    end
+    paint()
+    return {
+        SetState = function(state) isOn = state; paint() end,
+        GetState = function() return isOn end,
+        SetLocked = function(locked, lockedDesc)
+            LockIc.Visible = locked
+            if D and lockedDesc then D.Text = locked and lockedDesc or desc end
+        end,
+        SwitchBg = Btn,
+    }
+end
+
+-- baris stepper (- nilai +)
+W.Stepper = function(parent, title, desc, iconKey, order, value, minV, maxV, step, unit, onChange)
+    local Row = Instance.new("Frame")
+    Row.Size = UDim2.new(1, 0, 0, 44)
+    Row.BackgroundColor3 = Colors.GlassPanel
+    Row.LayoutOrder = order
+    Row.Parent = parent
+    Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 10)
+    local Stroke = Instance.new("UIStroke", Row)
+    Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    Stroke.Thickness = 1
+    Stroke.Color = Colors.Border
+
+    local Ic = MakeIcon(Row, iconKey, 16, Colors.Accent)
+    Ic.Position = UDim2.new(0, 10, 0.5, -8)
+    local T = NewLabel(Row, title, 12, Enum.Font.GothamMedium, Colors.Text)
+    T.Size = UDim2.new(1, -150, 0, 16)
+    T.Position = UDim2.new(0, 34, 0, 6)
+    T.TextTruncate = Enum.TextTruncate.AtEnd
+    local D = NewLabel(Row, desc, 10, Enum.Font.Gotham, Colors.TextDim)
+    D.Size = UDim2.new(1, -150, 0, 14)
+    D.Position = UDim2.new(0, 34, 0, 23)
+    D.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local function MakeBtn(txt, xOff)
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(0, 24, 0, 24)
+        b.Position = UDim2.new(1, xOff, 0.5, -12)
+        b.BackgroundColor3 = Colors.Tile
+        b.AutoButtonColor = false
+        b.Text = txt
+        b.TextSize = 14
+        b.Font = Enum.Font.GothamBold
+        b.TextColor3 = Colors.Text
+        b.Parent = Row
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+        return b
+    end
+    local Minus = MakeBtn("-", -102)
+    local Plus = MakeBtn("+", -34)
+    local V = NewLabel(Row, "", 12, Enum.Font.GothamMedium, Colors.Accent, Enum.TextXAlignment.Center)
+    V.Size = UDim2.new(0, 40, 0, 24)
+    V.Position = UDim2.new(1, -74, 0.5, -12)
+
+    local current = value
+    local function setV(n)
+        current = math.clamp(n, minV, maxV)
+        V.Text = tostring(current) .. unit
+        onChange(current)
+    end
+    Minus.MouseButton1Click:Connect(function() setV(current - step) end)
+    Plus.MouseButton1Click:Connect(function() setV(current + step) end)
+    V.Text = tostring(current) .. unit
+    return Row
+end
+
+-- baris profil (radio)
+W.Profile = function(parent, cfg, order)
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(1, 0, 0, 30)
+    Btn.BackgroundColor3 = Colors.GlassPanel
+    Btn.AutoButtonColor = false
+    Btn.Text = ""
+    Btn.LayoutOrder = order
+    Btn.Parent = parent
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 8)
+    local Stroke = Instance.new("UIStroke", Btn)
+    Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    Stroke.Thickness = 1
+    Stroke.Color = Colors.Border
+
+    local Dot = Instance.new("Frame", Btn)
+    Dot.Size = UDim2.new(0, 10, 0, 10)
+    Dot.Position = UDim2.new(0, 10, 0.5, -5)
+    Dot.BackgroundColor3 = Colors.Accent
+    Dot.BackgroundTransparency = 1
+    Dot.BorderSizePixel = 0
+    Instance.new("UICorner", Dot).CornerRadius = UDim.new(1, 0)
+    local DotStroke = Instance.new("UIStroke", Dot)
+    DotStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    DotStroke.Thickness = 1.5
+    DotStroke.Color = Colors.TextDim
+
+    local Left = Instance.new("Frame", Btn)
+    Left.Size = UDim2.new(0.62, -28, 1, 0)
+    Left.Position = UDim2.new(0, 28, 0, 0)
+    Left.BackgroundTransparency = 1
+    local LL = Instance.new("UIListLayout", Left)
+    LL.FillDirection = Enum.FillDirection.Horizontal
+    LL.VerticalAlignment = Enum.VerticalAlignment.Center
+    LL.SortOrder = Enum.SortOrder.LayoutOrder
+    LL.Padding = UDim.new(0, 6)
+    local NameLbl = NewLabel(Left, cfg.name, 12, Enum.Font.GothamMedium, Colors.Text)
+    NameLbl.AutomaticSize = Enum.AutomaticSize.X
+    NameLbl.Size = UDim2.new(0, 0, 1, 0)
+    NameLbl.LayoutOrder = 1
+    if cfg.isNew then
+        local Badge = Instance.new("TextLabel")
+        Badge.AutomaticSize = Enum.AutomaticSize.X
+        Badge.Size = UDim2.new(0, 0, 0, 14)
+        Badge.BackgroundColor3 = Colors.Green
+        Badge.BorderSizePixel = 0
+        Badge.Text = "baru"
+        Badge.Font = Enum.Font.GothamBold
+        Badge.TextSize = 10
+        Badge.TextColor3 = Colors.OnAccent
+        Badge.LayoutOrder = 2
+        Badge.Parent = Left
+        Instance.new("UICorner", Badge).CornerRadius = UDim.new(0, 6)
+        local bp = Instance.new("UIPadding", Badge)
+        bp.PaddingLeft = UDim.new(0, 5)
+        bp.PaddingRight = UDim.new(0, 5)
+    end
+
+    local Right = NewLabel(Btn, formatNumber(cfg.amount) .. " · " .. formatNumber(cfg.targetSpeed), 11, Enum.Font.Gotham, Colors.TextDim, Enum.TextXAlignment.Right)
+    Right.Size = UDim2.new(0.38, -10, 1, 0)
+    Right.Position = UDim2.new(0.62, 0, 0, 0)
+
+    local isOn = false
+    local function paint()
+        Btn.BackgroundColor3 = isOn and Colors.ChipOn or Colors.GlassPanel
+        Stroke.Color = isOn and Colors.Accent or Colors.Border
+        NameLbl.TextColor3 = isOn and Colors.Accent or Colors.Text
+        Right.TextColor3 = isOn and Colors.Accent or Colors.TextDim
+        Dot.BackgroundTransparency = isOn and 0 or 1
+        DotStroke.Color = isOn and Colors.Accent or Colors.TextDim
+    end
+    Btn.MouseEnter:Connect(function() if not isOn then Btn.BackgroundColor3 = Colors.Tile end end)
+    Btn.MouseLeave:Connect(function() if not isOn then Btn.BackgroundColor3 = Colors.GlassPanel end end)
+    paint()
+    return {
+        SetState = function(state) isOn = state; paint() end,
+        GetState = function() return isOn end,
+        SwitchBg = Btn,
+    }
+end
+
+-- ═══════════ [ SIDEBAR ] ═══════════
 local HomeBtn, AutoBuyBtn, SettingsBtn
 local SetHomeActive, SetAutoBuyActive, SetSettingsActive
 local MonitorBadge
 do
-    local TabBar = Instance.new("Frame", MainFrame)
-    TabBar.Size = UDim2.new(1, -24, 0, 30)
-    TabBar.Position = UDim2.new(0, 12, 0, 36)
-    TabBar.BackgroundColor3 = Colors.GlassPanel
-    Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 10)
+    local Sidebar = Instance.new("Frame", MainFrame)
+    Sidebar.Size = UDim2.new(0, SIDEBAR_W, 1, 0)
+    Sidebar.BackgroundColor3 = Colors.Sidebar
+    Sidebar.BorderSizePixel = 0
 
-    local function CreateTabButton(name, iconKey, xScale, xOffset)
+    local Sep = Instance.new("Frame", MainFrame)
+    Sep.Size = UDim2.new(0, 1, 1, 0)
+    Sep.Position = UDim2.new(0, SIDEBAR_W, 0, 0)
+    Sep.BackgroundColor3 = Colors.Border
+    Sep.BorderSizePixel = 0
+
+    -- logo + nama
+    local Logo = Instance.new("Frame", Sidebar)
+    Logo.Size = UDim2.new(0, 34, 0, 34)
+    Logo.Position = UDim2.new(0, 14, 0, 14)
+    Logo.BackgroundColor3 = Colors.Accent
+    Logo.BorderSizePixel = 0
+    Instance.new("UICorner", Logo).CornerRadius = UDim.new(0, 9)
+    local LogoIc = MakeIcon(Logo, "pickaxe", 18, Colors.OnAccent)
+    LogoIc.AnchorPoint = Vector2.new(0.5, 0.5)
+    LogoIc.Position = UDim2.new(0.5, 0, 0.5, 0)
+    local Title = NewLabel(Sidebar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
+    Title.Size = UDim2.new(0, 80, 0, 18)
+    Title.Position = UDim2.new(0, 56, 0, 15)
+    local Ver = NewLabel(Sidebar, "v37", 11, Enum.Font.Gotham, Colors.TextDim)
+    Ver.Size = UDim2.new(0, 80, 0, 14)
+    Ver.Position = UDim2.new(0, 56, 0, 33)
+
+    local MainLbl = NewLabel(Sidebar, "Main", 11, Enum.Font.GothamMedium, Colors.TextDim)
+    MainLbl.Size = UDim2.new(0, 60, 0, 14)
+    MainLbl.Position = UDim2.new(0, 20, 0, 68)
+
+    local NavList = Instance.new("Frame", Sidebar)
+    NavList.Size = UDim2.new(1, -20, 0, 120)
+    NavList.Position = UDim2.new(0, 10, 0, 88)
+    NavList.BackgroundTransparency = 1
+    local NavLayout = Instance.new("UIListLayout", NavList)
+    NavLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    NavLayout.Padding = UDim.new(0, 4)
+
+    local function CreateNavButton(name, iconKey, order)
         local Btn = Instance.new("TextButton")
-        Btn.Size = UDim2.new(1 / 3, -4, 1, -6)
-        Btn.Position = UDim2.new(xScale, xOffset, 0, 3)
-        Btn.BackgroundColor3 = Colors.Accent
+        Btn.Size = UDim2.new(1, 0, 0, 34)
+        Btn.BackgroundColor3 = Colors.Tile
         Btn.BackgroundTransparency = 1
         Btn.AutoButtonColor = false
         Btn.Text = ""
-        Btn.Parent = TabBar
+        Btn.LayoutOrder = order
+        Btn.Parent = NavList
         Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 8)
-        local Row = Instance.new("Frame", Btn)
-        Row.Size = UDim2.new(1, 0, 1, 0)
-        Row.BackgroundTransparency = 1
-        local Lay = Instance.new("UIListLayout", Row)
-        Lay.FillDirection = Enum.FillDirection.Horizontal
-        Lay.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        Lay.VerticalAlignment = Enum.VerticalAlignment.Center
-        Lay.SortOrder = Enum.SortOrder.LayoutOrder
-        Lay.Padding = UDim.new(0, 5)
-        local Ic = MakeIcon(Row, iconKey, 14, Colors.TextDim)
-        Ic.LayoutOrder = 1
-        local Txt = NewLabel(Row, name, 12, Enum.Font.GothamMedium, Colors.TextDim)
-        Txt.AutomaticSize = Enum.AutomaticSize.X
-        Txt.Size = UDim2.new(0, 0, 1, 0)
-        Txt.LayoutOrder = 2
 
-        -- titik hijau kecil: penanda monitor aktif saat sedang di tab lain
+        local Bar = Instance.new("Frame", Btn)
+        Bar.Size = UDim2.new(0, 3, 0, 18)
+        Bar.Position = UDim2.new(0, -10, 0.5, -9)
+        Bar.BackgroundColor3 = Colors.Accent
+        Bar.BorderSizePixel = 0
+        Bar.Visible = false
+        Instance.new("UICorner", Bar).CornerRadius = UDim.new(1, 0)
+
+        local Ic = MakeIcon(Btn, iconKey, 16, Colors.TextDim)
+        Ic.Position = UDim2.new(0, 10, 0.5, -8)
+        local Txt = NewLabel(Btn, name, 13, Enum.Font.GothamMedium, Colors.TextDim)
+        Txt.Size = UDim2.new(1, -40, 1, 0)
+        Txt.Position = UDim2.new(0, 36, 0, 0)
+
+        -- titik hijau: penanda monitor aktif saat sedang di tab lain
         local Badge = Instance.new("Frame", Btn)
         Badge.Size = UDim2.new(0, 6, 0, 6)
-        Badge.Position = UDim2.new(1, -10, 0, 4)
+        Badge.Position = UDim2.new(1, -14, 0.5, -3)
         Badge.BackgroundColor3 = Colors.Green
         Badge.BorderSizePixel = 0
-        Badge.ZIndex = 3
         Badge.Visible = false
         Instance.new("UICorner", Badge).CornerRadius = UDim.new(1, 0)
 
@@ -1246,181 +1517,239 @@ do
         Btn.MouseLeave:Connect(function() if not active then Txt.TextColor3 = Colors.TextDim end end)
         local function SetActive(isActive)
             active = isActive
+            Bar.Visible = isActive
             TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = isActive and 0 or 1}):Play()
-            Txt.TextColor3 = isActive and Colors.OnAccent or Colors.TextDim
-            SetIconColor(Ic, isActive and Colors.OnAccent or Colors.TextDim)
+            Txt.TextColor3 = isActive and Colors.Text or Colors.TextDim
+            SetIconColor(Ic, isActive and Colors.Accent or Colors.TextDim)
         end
         return Btn, SetActive, Badge
     end
 
-    HomeBtn, SetHomeActive, MonitorBadge = CreateTabButton("Monitor", "monitor", 0, 2)
-    AutoBuyBtn, SetAutoBuyActive = CreateTabButton("Auto Buy", "shop", 1 / 3, 2)
-    SettingsBtn, SetSettingsActive = CreateTabButton("Pengaturan", "settings", 2 / 3, 2)
+    HomeBtn, SetHomeActive, MonitorBadge = CreateNavButton("Monitor", "monitor", 1)
+    AutoBuyBtn, SetAutoBuyActive = CreateNavButton("Auto Buy", "shop", 2)
+    SettingsBtn, SetSettingsActive = CreateNavButton("Pengaturan", "settings", 3)
+
+    -- kartu akun di bawah
+    local FootSep = Instance.new("Frame", Sidebar)
+    FootSep.Size = UDim2.new(1, -28, 0, 1)
+    FootSep.Position = UDim2.new(0, 14, 1, -64)
+    FootSep.BackgroundColor3 = Colors.Border
+    FootSep.BorderSizePixel = 0
+
+    local Av = Instance.new("Frame", Sidebar)
+    Av.Size = UDim2.new(0, 32, 0, 32)
+    Av.Position = UDim2.new(0, 14, 1, -52)
+    Av.BackgroundColor3 = Colors.Tile
+    Av.BorderSizePixel = 0
+    Instance.new("UICorner", Av).CornerRadius = UDim.new(1, 0)
+    local AvIc = MakeIcon(Av, "user", 16, Colors.TextDim)
+    AvIc.AnchorPoint = Vector2.new(0.5, 0.5)
+    AvIc.Position = UDim2.new(0.5, 0, 0.5, 0)
+
+    local NameLbl = NewLabel(Sidebar, player.Name:sub(1, 2) .. "********", 12, Enum.Font.GothamBold, Colors.Text)
+    NameLbl.Size = UDim2.new(0, 92, 0, 16)
+    NameLbl.Position = UDim2.new(0, 54, 1, -52)
+    NameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    UI.SideStatus = NewLabel(Sidebar, "Idle", 11, Enum.Font.Gotham, Colors.TextDim)
+    UI.SideStatus.Size = UDim2.new(0, 92, 0, 14)
+    UI.SideStatus.Position = UDim2.new(0, 54, 1, -35)
+end
+
+-- ═══════════ [ HEADER KONTEN ] ═══════════
+do
+    local Header = Instance.new("Frame", MainFrame)
+    Header.Size = UDim2.new(1, -(SIDEBAR_W + 1), 0, 44)
+    Header.Position = UDim2.new(0, SIDEBAR_W + 1, 0, 0)
+    Header.BackgroundTransparency = 1
+
+    UI.PageTitle = NewLabel(Header, "Monitor", 17, Enum.Font.GothamBold, Colors.Text)
+    UI.PageTitle.Size = UDim2.new(0, 150, 1, 0)
+    UI.PageTitle.Position = UDim2.new(0, 14, 0, 0)
+
+    local Pill = Instance.new("Frame", Header)
+    Pill.Size = UDim2.new(0, 96, 0, 22)
+    Pill.Position = UDim2.new(1, -168, 0.5, -11)
+    Pill.BackgroundColor3 = Colors.GlassPanel
+    Pill.BorderSizePixel = 0
+    Instance.new("UICorner", Pill).CornerRadius = UDim.new(1, 0)
+    local PillStroke = Instance.new("UIStroke", Pill)
+    PillStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    PillStroke.Thickness = 1
+    PillStroke.Color = Colors.Border
+    UI.PillDot = Instance.new("Frame", Pill)
+    UI.PillDot.Size = UDim2.new(0, 6, 0, 6)
+    UI.PillDot.Position = UDim2.new(0, 10, 0.5, -3)
+    UI.PillDot.BackgroundColor3 = Colors.TextDim
+    UI.PillDot.BorderSizePixel = 0
+    Instance.new("UICorner", UI.PillDot).CornerRadius = UDim.new(1, 0)
+    UI.PillLbl = NewLabel(Pill, "Idle", 11, Enum.Font.GothamMedium, Colors.TextDim)
+    UI.PillLbl.Size = UDim2.new(1, -26, 1, 0)
+    UI.PillLbl.Position = UDim2.new(0, 22, 0, 0)
+
+    local CloseBtn = Instance.new("TextButton", Header)
+    CloseBtn.Size = UDim2.new(0, 26, 0, 26)
+    CloseBtn.Position = UDim2.new(1, -34, 0.5, -13)
+    CloseBtn.BackgroundTransparency = 1
+    CloseBtn.Text = ""
+    local CloseIcon = MakeIcon(CloseBtn, "close", 14, Colors.TextDim)
+    CloseIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    CloseIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+    CloseBtn.MouseEnter:Connect(function() SetIconColor(CloseIcon, Colors.Danger) end)
+    CloseBtn.MouseLeave:Connect(function() SetIconColor(CloseIcon, Colors.TextDim) end)
+    CloseBtn.MouseButton1Click:Connect(function()
+        ScreenGui:Destroy()
+    end)
+
+    UI.MinBtn = Instance.new("TextButton", Header)
+    UI.MinBtn.Size = UDim2.new(0, 26, 0, 26)
+    UI.MinBtn.Position = UDim2.new(1, -62, 0.5, -13)
+    UI.MinBtn.BackgroundTransparency = 1
+    UI.MinBtn.Text = ""
+    local MinIcon = MakeIcon(UI.MinBtn, "minus", 14, Colors.TextDim)
+    MinIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    MinIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+    UI.MinBtn.MouseEnter:Connect(function() SetIconColor(MinIcon, Colors.Text) end)
+    UI.MinBtn.MouseLeave:Connect(function() SetIconColor(MinIcon, Colors.TextDim) end)
 end
 
 local ContentArea = Instance.new("Frame", MainFrame)
-ContentArea.Size = UDim2.new(1, -24, 1, -118)
-ContentArea.Position = UDim2.new(0, 12, 0, 74)
+ContentArea.Size = UDim2.new(1, -(SIDEBAR_W + 25), 0, FRAME_H - 86)
+ContentArea.Position = UDim2.new(0, SIDEBAR_W + 13, 0, 46)
 ContentArea.BackgroundTransparency = 1
 
 local ShowTab   -- diisi setelah semua tab dibuat
+local monitorToggles = {}
+local toggleCallbacks = {}
 
 -- ═══════════════════════════════════════════════════════
--- ── TAB MONITOR (hanya progres) ─────────────────────────
+-- ── TAB MONITOR (kartu: profil, quick actions, status, progres, otomasi)
 -- ═══════════════════════════════════════════════════════
-local UI = {}   -- referensi elemen Monitor (satu local saja)
-
 local HomeTab = Instance.new("Frame", ContentArea)
 HomeTab.Size = UDim2.new(1, 0, 1, 0)
 HomeTab.BackgroundTransparency = 1
 
-local RING_SIZE, RING_T = 108, 9
-local RightGrad, RightStroke, LeftGrad, LeftStroke
-local StepPills = {}
-local RingHolder, PercentLbl, SubLbl, CaptionLbl, StatusLbl
-
 do
-    -- kartu profil aktif
-    local Card = Instance.new("Frame", HomeTab)
-    Card.Size = UDim2.new(1, 0, 0, 36)
-    Card.BackgroundColor3 = Colors.GlassPanel
-    Card.BorderSizePixel = 0
-    Card.Visible = false
-    Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 10)
-    local cs = Instance.new("UIStroke", Card)
-    cs.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    cs.Thickness = 1
-    cs.Color = Colors.Border
-    local cIc = MakeIcon(Card, "crown", 16, Colors.Accent)
-    cIc.Position = UDim2.new(0, 10, 0.5, -8)
-    local cName = NewLabel(Card, "—", 12, Enum.Font.GothamBold, Colors.Text)
-    cName.Size = UDim2.new(1, -44, 0, 16)
-    cName.Position = UDim2.new(0, 34, 0, 3)
-    cName.TextTruncate = Enum.TextTruncate.AtEnd
-    local cSub = NewLabel(Card, "", 10, Enum.Font.Gotham, Colors.TextDim)
-    cSub.Size = UDim2.new(1, -44, 0, 14)
-    cSub.Position = UDim2.new(0, 34, 0, 19)
-    cSub.TextTruncate = Enum.TextTruncate.AtEnd
-    UI.Card, UI.CardName, UI.CardSub = Card, cName, cSub
-
-    -- langkah (Income / Speed / Kapak)
-    local StepsRow = Instance.new("Frame", HomeTab)
-    StepsRow.Size = UDim2.new(1, 0, 0, 24)
-    StepsRow.Position = UDim2.new(0, 0, 0, 42)
-    StepsRow.BackgroundTransparency = 1
-    local StepsLayout = Instance.new("UIListLayout", StepsRow)
-    StepsLayout.FillDirection = Enum.FillDirection.Horizontal
-    StepsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    StepsLayout.Padding = UDim.new(0, 6)
-    StepsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-
-    for i = 1, 3 do
-        local P = Instance.new("Frame")
-        P.Size = UDim2.new(0, 101, 1, 0)
-        P.BackgroundColor3 = Colors.GlassPanel
-        P.LayoutOrder = i
-        P.Visible = false
-        P.Parent = StepsRow
-        Instance.new("UICorner", P).CornerRadius = UDim.new(0, 8)
-        
-        local Row = Instance.new("Frame", P)
-        Row.Size = UDim2.new(1, 0, 1, 0)
-        Row.BackgroundTransparency = 1
-        local Lay = Instance.new("UIListLayout", Row)
-        Lay.FillDirection = Enum.FillDirection.Horizontal
-        Lay.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        Lay.VerticalAlignment = Enum.VerticalAlignment.Center
-        Lay.SortOrder = Enum.SortOrder.LayoutOrder
-        Lay.Padding = UDim.new(0, 5)
-        
-        local Ic = MakeIcon(Row, "coin", 12, Colors.TextDim)
-        Ic.LayoutOrder = 1
-        
-        local Ck = MakeIcon(Row, "check", 12, Colors.Green)
-        Ck.LayoutOrder = 1
-        Ck.Visible = false
-        
-        local L = NewLabel(Row, "", 10, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
-        L.AutomaticSize = Enum.AutomaticSize.X
-        L.Size = UDim2.new(0, 0, 1, 0)
-        L.LayoutOrder = 2
-        
-        StepPills[i] = { Frame = P, Label = L, Icon = Ic, Check = Ck }
+    local function MakeColumn(x, w)
+        local col = Instance.new("Frame", HomeTab)
+        col.Size = UDim2.new(0, w, 1, 0)
+        col.Position = UDim2.new(0, x, 0, 0)
+        col.BackgroundTransparency = 1
+        local lay = Instance.new("UIListLayout", col)
+        lay.SortOrder = Enum.SortOrder.LayoutOrder
+        lay.Padding = UDim.new(0, 10)
+        return col
+    end
+    local function MakeRow(parent, h)
+        local row = Instance.new("Frame", parent)
+        row.Size = UDim2.new(1, 0, 0, h)
+        row.BackgroundTransparency = 1
+        local lay = Instance.new("UIListLayout", row)
+        lay.FillDirection = Enum.FillDirection.Horizontal
+        lay.SortOrder = Enum.SortOrder.LayoutOrder
+        lay.Padding = UDim.new(0, 6)
+        return row
     end
 
-    -- ring progres
-    RingHolder = Instance.new("Frame", HomeTab)
-    RingHolder.Size = UDim2.new(0, RING_SIZE, 0, RING_SIZE)
-    RingHolder.Position = UDim2.new(0.5, -RING_SIZE / 2, 0, 16)
-    RingHolder.BackgroundTransparency = 1
+    local Left = MakeColumn(0, 180)
+    local Right = MakeColumn(190, 215)
 
-    local Track = Instance.new("Frame", RingHolder)
-    Track.Size = UDim2.new(1, -RING_T * 2, 1, -RING_T * 2)
-    Track.Position = UDim2.new(0, RING_T, 0, RING_T)
-    Track.BackgroundTransparency = 1
-    Instance.new("UICorner", Track).CornerRadius = UDim.new(1, 0)
-    local TrackStroke = Instance.new("UIStroke", Track)
-    TrackStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    TrackStroke.Thickness = RING_T
-    TrackStroke.Color = Colors.Track
+    -- ── Profil aktif ──
+    local _, pBody = W.Card(Left, "Profil aktif", "crown", 70, 1)
+    UI.CardName = NewLabel(pBody, "Belum ada profil", 12, Enum.Font.GothamBold, Colors.Text)
+    UI.CardName.Size = UDim2.new(1, 0, 0, 16)
+    UI.CardName.TextTruncate = Enum.TextTruncate.AtEnd
+    UI.CardSub = NewLabel(pBody, "Pilih di tab Pengaturan", 10, Enum.Font.Gotham, Colors.TextDim)
+    UI.CardSub.Size = UDim2.new(1, 0, 0, 14)
+    UI.CardSub.Position = UDim2.new(0, 0, 0, 17)
+    UI.CardSub.TextTruncate = Enum.TextTruncate.AtEnd
+    local pRow = MakeRow(pBody, 36)
+    pRow.Position = UDim2.new(0, 0, 0, 34)
+    UI.TgtInc = W.Tile(pRow, 75, 1, "—", "Target income")
+    UI.TgtSpd = W.Tile(pRow, 75, 2, "—", "Target speed")
 
-    local function MakeHalf(isRight)
-        local Clip = Instance.new("Frame", RingHolder)
-        Clip.Size = UDim2.new(0.5, 0, 1, 0)
-        Clip.Position = isRight and UDim2.new(0.5, 0, 0, 0) or UDim2.new(0, 0, 0, 0)
-        Clip.BackgroundTransparency = 1
-        Clip.ClipsDescendants = true
-        local Circ = Instance.new("Frame", Clip)
-        Circ.Size = UDim2.new(2, -RING_T * 2, 1, -RING_T * 2)
-        Circ.Position = isRight and UDim2.new(-1, RING_T, 0, RING_T) or UDim2.new(0, RING_T, 0, RING_T)
-        Circ.BackgroundTransparency = 1
-        Instance.new("UICorner", Circ).CornerRadius = UDim.new(1, 0)
-        local St = Instance.new("UIStroke", Circ)
-        St.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        St.Thickness = RING_T
-        St.Color = Colors.Accent
-        local Gr = Instance.new("UIGradient", St)
-        Gr.Transparency = NumberSequence.new({
-            NumberSequenceKeypoint.new(0, 0),
-            NumberSequenceKeypoint.new(0.5, 0),
-            NumberSequenceKeypoint.new(0.501, 1),
-            NumberSequenceKeypoint.new(1, 1),
-        })
-        return Gr, St
+    -- ── Quick actions ──
+    local _, qBody = W.Card(Left, "Quick actions", "bolt", 56, 2)
+    local function QBtn(text, pos, size, color)
+        local b = Instance.new("TextButton")
+        b.Size = size
+        b.Position = pos
+        b.BackgroundColor3 = Colors.Tile
+        b.AutoButtonColor = false
+        b.Text = text
+        b.Font = Enum.Font.GothamMedium
+        b.TextSize = 11
+        b.TextColor3 = color or Colors.Text
+        b.Parent = qBody
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 7)
+        b.MouseEnter:Connect(function() b.BackgroundColor3 = Colors.SwitchOff end)
+        b.MouseLeave:Connect(function() b.BackgroundColor3 = Colors.Tile end)
+        return b
     end
-    RightGrad, RightStroke = MakeHalf(true)
-    LeftGrad, LeftStroke = MakeHalf(false)
+    local bProfile = QBtn("Profil", UDim2.new(0, 0, 0, 0), UDim2.new(0.5, -3, 0, 26))
+    local bHook = QBtn("Webhook", UDim2.new(0.5, 3, 0, 0), UDim2.new(0.5, -3, 0, 26))
+    local bStop = QBtn("Hentikan semua", UDim2.new(0, 0, 0, 30), UDim2.new(1, 0, 0, 26), Colors.Danger)
 
-    PercentLbl = NewLabel(RingHolder, "—", 22, Enum.Font.GothamBold, Colors.Text, Enum.TextXAlignment.Center)
-    PercentLbl.Size = UDim2.new(1, 0, 0, 26)
-    PercentLbl.Position = UDim2.new(0, 0, 0.5, -20)
-    PercentLbl.ZIndex = 5
-    SubLbl = NewLabel(RingHolder, "Idle", 11, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
-    SubLbl.Size = UDim2.new(1, 0, 0, 14)
-    SubLbl.Position = UDim2.new(0, 0, 0.5, 6)
-    SubLbl.ZIndex = 5
+    bProfile.MouseButton1Click:Connect(function() if ShowTab then ShowTab("settings") end end)
+    bHook.MouseButton1Click:Connect(function()
+        task.spawn(function()
+            local m, s = getMyData()
+            sendToDiscord(m, s, "+ LAPORAN MANUAL")
+            showNotif("✅ WEBHOOK BERHASIL", "Laporan dikirim ke Discord", 3)
+        end)
+    end)
+    bStop.MouseButton1Click:Connect(function()
+        local any = false
+        for i, tog in ipairs(monitorToggles) do
+            if tog.GetState() then
+                any = true
+                tog.SetState(false)
+                if toggleCallbacks[i] then toggleCallbacks[i](false) end
+            end
+        end
+        if autoBuyEnabled then
+            any = true
+            autoBuyEnabled = false
+            hasCheckedOwnership = false
+            hasCheckedTarget = false
+            buyStatus = "None"
+        end
+        if any then
+            showNotif("🛑 DIHENTIKAN", "Monitor dan Auto Buy dimatikan", 3)
+        else
+            showNotif("ℹ️ INFO", "Tidak ada yang sedang aktif", 3)
+        end
+    end)
 
-    CaptionLbl = NewLabel(HomeTab, "Pilih profil di tab Pengaturan", 12, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
-    CaptionLbl.Size = UDim2.new(1, 0, 0, 18)
-    CaptionLbl.Position = UDim2.new(0, 0, 0, 130)
+    -- ── Status ──
+    local _, sBody = W.Card(Right, "Status", "clock", 36, 1)
+    local sRow = MakeRow(sBody, 36)
+    UI.StCash = W.Tile(sRow, 59, 1, "0", "Cash")
+    UI.StInc = W.Tile(sRow, 59, 2, "0", "Income")
+    UI.StSpd = W.Tile(sRow, 59, 3, "0", "Speed")
 
-    -- tiga bar progres (Income / Speed / Kapak)
+    -- ── Progres ──
+    local gCard, gBody = W.Card(Right, "Progres", "target", 60, 2)
+    UI.ProgCap = NewLabel(gCard, "Idle", 10, Enum.Font.Gotham, Colors.TextDim, Enum.TextXAlignment.Right)
+    UI.ProgCap.Size = UDim2.new(1, -120, 0, 30)
+    UI.ProgCap.Position = UDim2.new(0, 90, 0, 0)
+    UI.ProgCap.TextTruncate = Enum.TextTruncate.AtEnd
+
     UI.BarDefs = {
         { key = "inc", name = "Income", color = Colors.Accent },
         { key = "spd", name = "Speed", color = Colors.Green },
         { key = "pick", name = "Kapak", color = Colors.Amber },
     }
     UI.Bars = {}
-    for _, def in ipairs(UI.BarDefs) do
-        local Row = Instance.new("Frame", HomeTab)
-        Row.Size = UDim2.new(1, 0, 0, 18)
+    for i, def in ipairs(UI.BarDefs) do
+        local Row = Instance.new("Frame", gBody)
+        Row.Size = UDim2.new(1, 0, 0, 20)
+        Row.Position = UDim2.new(0, 0, 0, (i - 1) * 20)
         Row.BackgroundTransparency = 1
-        Row.Visible = false
         local L = NewLabel(Row, def.name, 11, Enum.Font.GothamMedium, Colors.TextDim)
-        L.Size = UDim2.new(0, 46, 1, 0)
+        L.Size = UDim2.new(0, 44, 1, 0)
         local Tr = Instance.new("Frame", Row)
-        Tr.Size = UDim2.new(1, -136, 0, 6)
-        Tr.Position = UDim2.new(0, 50, 0.5, -3)
+        Tr.Size = UDim2.new(1, -92, 0, 6)
+        Tr.Position = UDim2.new(0, 48, 0.5, -3)
         Tr.BackgroundColor3 = Colors.Track
         Tr.BorderSizePixel = 0
         Instance.new("UICorner", Tr).CornerRadius = UDim.new(1, 0)
@@ -1429,45 +1758,50 @@ do
         Fl.BackgroundColor3 = def.color
         Fl.BorderSizePixel = 0
         Instance.new("UICorner", Fl).CornerRadius = UDim.new(1, 0)
-        local V = NewLabel(Row, "", 11, Enum.Font.Gotham, Colors.Text, Enum.TextXAlignment.Right)
-        V.Size = UDim2.new(0, 80, 1, 0)
-        V.Position = UDim2.new(1, -80, 0, 0)
+        local V = NewLabel(Row, "—", 11, Enum.Font.Gotham, Colors.Text, Enum.TextXAlignment.Right)
+        V.Size = UDim2.new(0, 40, 1, 0)
+        V.Position = UDim2.new(1, -40, 0, 0)
         UI.Bars[def.key] = { Row = Row, Fill = Fl, Val = V }
     end
 
-    -- tombol saat belum ada target aktif
-    local EmptyBtn = Instance.new("TextButton", HomeTab)
-    EmptyBtn.Size = UDim2.new(0, 160, 0, 30)
-    EmptyBtn.Position = UDim2.new(0.5, -80, 0, 158)
-    EmptyBtn.BackgroundColor3 = Colors.Accent
-    EmptyBtn.AutoButtonColor = false
-    EmptyBtn.Text = "Buka Pengaturan"
-    EmptyBtn.Font = Enum.Font.GothamMedium
-    EmptyBtn.TextSize = 12
-    EmptyBtn.TextColor3 = Colors.OnAccent
-    Instance.new("UICorner", EmptyBtn).CornerRadius = UDim.new(0, 8)
-    EmptyBtn.MouseButton1Click:Connect(function() if ShowTab then ShowTab("settings") end end)
-    UI.EmptyBtn = EmptyBtn
+    -- ── Otomasi ──
+    local _, oBody = W.Card(Right, "Otomasi", "settings", 54, 3)
+    local oLay = Instance.new("UIListLayout", oBody)
+    oLay.SortOrder = Enum.SortOrder.LayoutOrder
+    oLay.Padding = UDim.new(0, 2)
+    UI.AutoJump = W.Switch(oBody, "Auto jump", nil, "jump", 1, false, Colors.Tile)
+    UI.AutoRespawn = W.Switch(oBody, "Auto respawn", nil, "hourglass", 2, true, Colors.Tile)
 
-    StatusLbl = NewLabel(HomeTab, "Status: Pilih profil di tab Pengaturan.", 10, Enum.Font.Gotham, Colors.TextDim, Enum.TextXAlignment.Center)
-    StatusLbl.Size = UDim2.new(1, 0, 0, 16)
-    StatusLbl.Position = UDim2.new(0, 0, 1, -16)
-    StatusLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    UI.AutoJump.SwitchBg.MouseButton1Click:Connect(function()
+        local newState = not UI.AutoJump.GetState()
+        UI.AutoJump.SetState(newState)
+        isAutoJumpEnabled = newState
+    end)
+    UI.AutoRespawn.SwitchBg.MouseButton1Click:Connect(function()
+        -- kalau monitor aktif, saklar dikunci → tidak bisa dimatikan
+        if isAutoRespawnLocked then
+            showNotif("🔒 TERKUNCI", "Auto Respawn dikunci saat Monitor aktif", 3)
+            return
+        end
+        local newState = not UI.AutoRespawn.GetState()
+        UI.AutoRespawn.SetState(newState)
+        isAutoRespawnIdle = newState
+    end)
 end
 
-local function SetRing(p)
-    local angle = math.clamp(p, 0, 1) * 360
-    RightGrad.Rotation = math.clamp(angle, 0, 180)
-    LeftGrad.Rotation = math.clamp(angle - 180, 0, 180) - 180
-end
-SetRing(0)
-
--- ── Footer status ────────────────────────────────────────
+-- ── Footer status (status auto buy) ─────────────────────
 local FooterBar = Instance.new("Frame", MainFrame)
-FooterBar.Size = UDim2.new(1, -16, 0, 28)
-FooterBar.Position = UDim2.new(0, 8, 1, -36)
+FooterBar.Size = UDim2.new(1, -(SIDEBAR_W + 25), 0, 24)
+FooterBar.Position = UDim2.new(0, SIDEBAR_W + 13, 1, -34)
 FooterBar.BackgroundColor3 = Colors.GlassPanel
+FooterBar.BorderSizePixel = 0
 Instance.new("UICorner", FooterBar).CornerRadius = UDim.new(0, 8)
+do
+    local FS = Instance.new("UIStroke", FooterBar)
+    FS.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    FS.Thickness = 1
+    FS.Color = Colors.Border
+end
 
 local BuyStatusLbl = NewLabel(FooterBar, "Status: Idle", 11, Enum.Font.GothamBold, Colors.TextDim)
 BuyStatusLbl.Size = UDim2.new(1, -16, 1, 0)
@@ -1506,15 +1840,12 @@ do
 end
 
 -- ═══════════════════════════════════════════════════════
--- ── TAB PENGATURAN (profil monitor, otomasi, timer, notifikasi, data)
+-- ── TAB PENGATURAN (profil monitor, timer, notifikasi, data)
 -- ═══════════════════════════════════════════════════════
 local SettingsTab = Instance.new("Frame", ContentArea)
 SettingsTab.Size = UDim2.new(1, 0, 1, 0)
 SettingsTab.BackgroundTransparency = 1
 SettingsTab.Visible = false
-
-local monitorToggles = {}
-local toggleCallbacks = {}
 
 do
     local Scroll = Instance.new("ScrollingFrame", SettingsTab)
@@ -1526,7 +1857,7 @@ do
     Layout.SortOrder = Enum.SortOrder.LayoutOrder
 
     local function Section(text, order)
-        local l = NewLabel(Scroll, text, 11, Enum.Font.GothamMedium, Colors.Accent)
+        local l = NewLabel(Scroll, text, 11, Enum.Font.GothamBold, Colors.Accent)
         l.Size = UDim2.new(1, 0, 0, 16)
         l.LayoutOrder = order
         return l
@@ -1538,206 +1869,6 @@ do
         l.LayoutOrder = order
         l.TextTruncate = Enum.TextTruncate.AtEnd
         return l
-    end
-
-    -- ── baris saklar ───────────────────────────────────
-    local function CreateSwitchRow(title, desc, lockedDesc, iconKey, order, defaultState)
-        local Btn = Instance.new("TextButton")
-        Btn.Size = UDim2.new(1, 0, 0, 44)
-        Btn.BackgroundColor3 = Colors.GlassPanel
-        Btn.AutoButtonColor = false
-        Btn.Text = ""
-        Btn.LayoutOrder = order
-        Btn.Parent = Scroll
-        Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 10)
-        local Stroke = Instance.new("UIStroke", Btn)
-        Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        Stroke.Thickness = 1
-        Stroke.Color = Colors.Border
-
-        local Ic = MakeIcon(Btn, iconKey, 16, Colors.TextDim)
-        Ic.Position = UDim2.new(0, 10, 0.5, -8)
-        local T = NewLabel(Btn, title, 12, Enum.Font.GothamMedium, Colors.Text)
-        T.Size = UDim2.new(1, -100, 0, 16)
-        T.Position = UDim2.new(0, 34, 0, 6)
-        T.TextTruncate = Enum.TextTruncate.AtEnd
-        local D = NewLabel(Btn, desc, 10, Enum.Font.Gotham, Colors.TextDim)
-        D.Size = UDim2.new(1, -100, 0, 14)
-        D.Position = UDim2.new(0, 34, 0, 23)
-        D.TextTruncate = Enum.TextTruncate.AtEnd
-
-        local LockIc = MakeIcon(Btn, "lock", 12, Colors.Accent)
-        LockIc.Position = UDim2.new(1, -66, 0.5, -6)
-        LockIc.Visible = false
-
-        local SwTrack = Instance.new("Frame", Btn)
-        SwTrack.Size = UDim2.new(0, 34, 0, 18)
-        SwTrack.Position = UDim2.new(1, -44, 0.5, -9)
-        SwTrack.BackgroundColor3 = Colors.SwitchOff
-        SwTrack.BorderSizePixel = 0
-        Instance.new("UICorner", SwTrack).CornerRadius = UDim.new(1, 0)
-        local Knob = Instance.new("Frame", SwTrack)
-        Knob.Size = UDim2.new(0, 14, 0, 14)
-        Knob.Position = UDim2.new(0, 2, 0.5, -7)
-        Knob.BackgroundColor3 = Colors.Text
-        Knob.BorderSizePixel = 0
-        Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
-
-        local isOn = defaultState
-        local function paint()
-            local info = TweenInfo.new(0.18)
-            TweenService:Create(SwTrack, info, {BackgroundColor3 = isOn and Colors.Accent or Colors.SwitchOff}):Play()
-            TweenService:Create(Knob, info, {Position = isOn and UDim2.new(0, 18, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)}):Play()
-            TweenService:Create(Stroke, info, {Color = isOn and Colors.Accent or Colors.Border}):Play()
-            SetIconColor(Ic, isOn and Colors.Accent or Colors.TextDim)
-        end
-        paint()
-        return {
-            SetState = function(state) isOn = state; paint() end,
-            GetState = function() return isOn end,
-            SetLocked = function(locked)
-                LockIc.Visible = locked
-                D.Text = locked and lockedDesc or desc
-            end,
-            SwitchBg = Btn,
-        }
-    end
-
-    -- ── baris stepper (- nilai +) ───────────────────────
-    local function CreateStepperRow(title, desc, iconKey, order, value, minV, maxV, step, unit, onChange)
-        local Row = Instance.new("Frame")
-        Row.Size = UDim2.new(1, 0, 0, 44)
-        Row.BackgroundColor3 = Colors.GlassPanel
-        Row.LayoutOrder = order
-        Row.Parent = Scroll
-        Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 10)
-        local Stroke = Instance.new("UIStroke", Row)
-        Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        Stroke.Thickness = 1
-        Stroke.Color = Colors.Border
-
-        local Ic = MakeIcon(Row, iconKey, 16, Colors.Accent)
-        Ic.Position = UDim2.new(0, 10, 0.5, -8)
-        local T = NewLabel(Row, title, 12, Enum.Font.GothamMedium, Colors.Text)
-        T.Size = UDim2.new(1, -150, 0, 16)
-        T.Position = UDim2.new(0, 34, 0, 6)
-        T.TextTruncate = Enum.TextTruncate.AtEnd
-        local D = NewLabel(Row, desc, 10, Enum.Font.Gotham, Colors.TextDim)
-        D.Size = UDim2.new(1, -150, 0, 14)
-        D.Position = UDim2.new(0, 34, 0, 23)
-        D.TextTruncate = Enum.TextTruncate.AtEnd
-
-        local function MakeBtn(txt, xOff)
-            local b = Instance.new("TextButton")
-            b.Size = UDim2.new(0, 24, 0, 24)
-            b.Position = UDim2.new(1, xOff, 0.5, -12)
-            b.BackgroundColor3 = Colors.SwitchOff
-            b.AutoButtonColor = false
-            b.Text = txt
-            b.TextSize = 14
-            b.Font = Enum.Font.GothamBold
-            b.TextColor3 = Colors.Text
-            b.Parent = Row
-            Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
-            return b
-        end
-        local Minus = MakeBtn("-", -102)
-        local Plus = MakeBtn("+", -34)
-        local V = NewLabel(Row, "", 12, Enum.Font.GothamMedium, Colors.Accent, Enum.TextXAlignment.Center)
-        V.Size = UDim2.new(0, 40, 0, 24)
-        V.Position = UDim2.new(1, -74, 0.5, -12)
-
-        local current = value
-        local function setV(n)
-            current = math.clamp(n, minV, maxV)
-            V.Text = tostring(current) .. unit
-            onChange(current)
-        end
-        Minus.MouseButton1Click:Connect(function() setV(current - step) end)
-        Plus.MouseButton1Click:Connect(function() setV(current + step) end)
-        V.Text = tostring(current) .. unit
-        return Row
-    end
-
-    -- ── baris profil (radio) ────────────────────────────
-    local function CreateProfileRow(parent, cfg, order)
-        local Btn = Instance.new("TextButton")
-        Btn.Size = UDim2.new(1, 0, 0, 30)
-        Btn.BackgroundColor3 = Colors.GlassPanel
-        Btn.AutoButtonColor = false
-        Btn.Text = ""
-        Btn.LayoutOrder = order
-        Btn.Parent = parent
-        Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 8)
-        local Stroke = Instance.new("UIStroke", Btn)
-        Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        Stroke.Thickness = 1
-        Stroke.Color = Colors.Border
-
-        local Dot = Instance.new("Frame", Btn)
-        Dot.Size = UDim2.new(0, 10, 0, 10)
-        Dot.Position = UDim2.new(0, 10, 0.5, -5)
-        Dot.BackgroundColor3 = Colors.Accent
-        Dot.BackgroundTransparency = 1
-        Dot.BorderSizePixel = 0
-        Instance.new("UICorner", Dot).CornerRadius = UDim.new(1, 0)
-        local DotStroke = Instance.new("UIStroke", Dot)
-        DotStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        DotStroke.Thickness = 1.5
-        DotStroke.Color = Colors.TextDim
-
-        local Left = Instance.new("Frame", Btn)
-        Left.Size = UDim2.new(0.62, -28, 1, 0)
-        Left.Position = UDim2.new(0, 28, 0, 0)
-        Left.BackgroundTransparency = 1
-        local LL = Instance.new("UIListLayout", Left)
-        LL.FillDirection = Enum.FillDirection.Horizontal
-        LL.VerticalAlignment = Enum.VerticalAlignment.Center
-        LL.SortOrder = Enum.SortOrder.LayoutOrder
-        LL.Padding = UDim.new(0, 6)
-        local NameLbl = NewLabel(Left, cfg.name, 12, Enum.Font.GothamMedium, Colors.Text)
-        NameLbl.AutomaticSize = Enum.AutomaticSize.X
-        NameLbl.Size = UDim2.new(0, 0, 1, 0)
-        NameLbl.LayoutOrder = 1
-        if cfg.isNew then
-            local Badge = Instance.new("TextLabel")
-            Badge.AutomaticSize = Enum.AutomaticSize.X
-            Badge.Size = UDim2.new(0, 0, 0, 14)
-            Badge.BackgroundColor3 = Colors.Green
-            Badge.BorderSizePixel = 0
-            Badge.Text = "baru"
-            Badge.Font = Enum.Font.GothamBold
-            Badge.TextSize = 10
-            Badge.TextColor3 = Colors.OnAccent
-            Badge.LayoutOrder = 2
-            Badge.Parent = Left
-            Instance.new("UICorner", Badge).CornerRadius = UDim.new(0, 6)
-            local bp = Instance.new("UIPadding", Badge)
-            bp.PaddingLeft = UDim.new(0, 5)
-            bp.PaddingRight = UDim.new(0, 5)
-        end
-
-        local Right = NewLabel(Btn, formatNumber(cfg.amount) .. " · " .. formatNumber(cfg.targetSpeed), 11, Enum.Font.Gotham, Colors.TextDim, Enum.TextXAlignment.Right)
-        Right.Size = UDim2.new(0.38, -10, 1, 0)
-        Right.Position = UDim2.new(0.62, 0, 0, 0)
-
-        local isOn = false
-        local function paint()
-            Btn.BackgroundColor3 = isOn and Colors.ChipOn or Colors.GlassPanel
-            Stroke.Color = isOn and Colors.Accent or Colors.Border
-            NameLbl.TextColor3 = isOn and Colors.Accent or Colors.Text
-            Right.TextColor3 = isOn and Colors.Accent or Colors.TextDim
-            Dot.BackgroundTransparency = isOn and 0 or 1
-            DotStroke.Color = isOn and Colors.Accent or Colors.TextDim
-        end
-        Btn.MouseEnter:Connect(function() if not isOn then Btn.BackgroundColor3 = Colors.SwitchOff end end)
-        Btn.MouseLeave:Connect(function() if not isOn then Btn.BackgroundColor3 = Colors.GlassPanel end end)
-        paint()
-        return {
-            SetState = function(state) isOn = state; paint() end,
-            GetState = function() return isOn end,
-            SwitchBg = Btn,
-        }
     end
 
     -- ═════ SUSUNAN PENGATURAN ═════
@@ -1785,19 +1916,15 @@ do
 
     Hint("Ketuk profil aktif lagi untuk mematikan monitor", 4)
 
-    Section("Otomasi", 5)
-    local autoJumpToggle = CreateSwitchRow("Auto jump", "Lompat saat speed berhenti naik", "Lompat saat speed berhenti naik", "jump", 6, false)
-    local autoRespawnToggle = CreateSwitchRow("Auto respawn", "Respawn kalau karakter diam", "Dikunci saat monitor aktif", "hourglass", 7, true)
+    Section("Timer", 5)
+    W.Stepper(Scroll, "Batas diam", "Detik sebelum respawn", "clock", 6, IDLE_TIMEOUT, 5, 120, 1, "s", function(v) IDLE_TIMEOUT = v end)
+    W.Stepper(Scroll, "Batas macet", "Detik sebelum lompat", "clock", 7, STUCK_TIMEOUT, 3, 60, 1, "s", function(v) STUCK_TIMEOUT = v end)
 
-    Section("Timer", 8)
-    CreateStepperRow("Batas diam", "Detik sebelum respawn", "clock", 9, IDLE_TIMEOUT, 5, 120, 1, "s", function(v) IDLE_TIMEOUT = v end)
-    CreateStepperRow("Batas macet", "Detik sebelum lompat", "clock", 10, STUCK_TIMEOUT, 3, 60, 1, "s", function(v) STUCK_TIMEOUT = v end)
+    Section("Notifikasi", 8)
+    local notifToggle = W.Switch(Scroll, "Notifikasi di layar", "Pop-up status", "bell", 9, true)
+    W.Stepper(Scroll, "Interval webhook", "Jeda kirim ke Discord", "bolt", 10, WEBHOOK_INTERVAL, 5, 300, 5, "s", function(v) WEBHOOK_INTERVAL = v end)
 
-    Section("Notifikasi", 11)
-    local notifToggle = CreateSwitchRow("Notifikasi di layar", "Pop-up status", "Pop-up status", "bell", 12, true)
-    CreateStepperRow("Interval webhook", "Jeda kirim ke Discord", "bolt", 13, WEBHOOK_INTERVAL, 5, 300, 5, "s", function(v) WEBHOOK_INTERVAL = v end)
-
-    Section("Data", 14)
+    Section("Data", 11)
     local ResetBtn = Instance.new("TextButton", Scroll)
     ResetBtn.Size = UDim2.new(1, 0, 0, 32)
     ResetBtn.BackgroundColor3 = Colors.GlassPanel
@@ -1806,7 +1933,7 @@ do
     ResetBtn.Font = Enum.Font.GothamMedium
     ResetBtn.TextSize = 12
     ResetBtn.TextColor3 = Colors.Danger
-    ResetBtn.LayoutOrder = 15
+    ResetBtn.LayoutOrder = 12
     Instance.new("UICorner", ResetBtn).CornerRadius = UDim.new(0, 10)
     local RS = Instance.new("UIStroke", ResetBtn)
     RS.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
@@ -1816,25 +1943,7 @@ do
     local Spacer = Instance.new("Frame", Scroll)
     Spacer.Size = UDim2.new(1, 0, 0, 4)
     Spacer.BackgroundTransparency = 1
-    Spacer.LayoutOrder = 16
-
-    -- ═════ LOGIKA SAKLAR ═════
-    autoJumpToggle.SwitchBg.MouseButton1Click:Connect(function()
-        local newState = not autoJumpToggle.GetState()
-        autoJumpToggle.SetState(newState)
-        isAutoJumpEnabled = newState
-    end)
-
-    autoRespawnToggle.SwitchBg.MouseButton1Click:Connect(function()
-        -- kalau monitor aktif, saklar dikunci → tidak bisa dimatikan
-        if isAutoRespawnLocked then
-            showNotif("🔒 TERKUNCI", "Auto Respawn dikunci saat Monitor aktif", 3)
-            return
-        end
-        local newState = not autoRespawnToggle.GetState()
-        autoRespawnToggle.SetState(newState)
-        isAutoRespawnIdle = newState
-    end)
+    Spacer.LayoutOrder = 13
 
     notifToggle.SwitchBg.MouseButton1Click:Connect(function()
         local newState = not notifToggle.GetState()
@@ -1844,7 +1953,7 @@ do
 
     -- ═════ BARIS PROFIL (terbaru di atas) ═════
     for i, cfg in ipairs(CONFIG_DB) do
-        local toggleObj = CreateProfileRow(ProfileList, cfg, #CONFIG_DB - i)
+        local toggleObj = W.Profile(ProfileList, cfg, #CONFIG_DB - i)
         local function callbackFn(state)
             if state then
                 for _, other in pairs(monitorToggles) do
@@ -1865,8 +1974,8 @@ do
                 prereqPrice = cfg.prereqPrice or 4e15
                 isAutoRespawnLocked = true
                 isAutoRespawnIdle = true        -- paksa ON
-                autoRespawnToggle.SetState(true)
-                autoRespawnToggle.SetLocked(true)
+                UI.AutoRespawn.SetState(true)
+                UI.AutoRespawn.SetLocked(true)
                 if cfg.pickaxeId then
                     targetPickaxeName = cfg.pickaxeName
                     targetPickaxeId = cfg.pickaxeId
@@ -1888,7 +1997,7 @@ do
                 idleTimeAccum = 0
                 isRespawningIdle = false
                 isAutoRespawnLocked = false
-                autoRespawnToggle.SetLocked(false)
+                UI.AutoRespawn.SetLocked(false)
             end
         end
         toggleCallbacks[i] = callbackFn
@@ -1946,19 +2055,27 @@ local SelValue
 local PickRows = {}
 do
     local SelectedCard = Instance.new("Frame", AutoBuyTab)
-    SelectedCard.Size = UDim2.new(1, 0, 0, 38)
+    SelectedCard.Size = UDim2.new(1, 0, 0, 40)
     SelectedCard.BackgroundColor3 = Colors.GlassPanel
+    SelectedCard.BorderSizePixel = 0
     Instance.new("UICorner", SelectedCard).CornerRadius = UDim.new(0, 10)
+    local SelStroke = Instance.new("UIStroke", SelectedCard)
+    SelStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    SelStroke.Thickness = 1
+    SelStroke.Color = Colors.Border
+    local SelIc = MakeIcon(SelectedCard, "shop", 16, Colors.Accent)
+    SelIc.Position = UDim2.new(0, 12, 0.5, -8)
     local SelCap = NewLabel(SelectedCard, "Kapak target", 10, Enum.Font.Gotham, Colors.TextDim)
-    SelCap.Size = UDim2.new(1, -20, 0, 14)
-    SelCap.Position = UDim2.new(0, 10, 0, 5)
+    SelCap.Size = UDim2.new(1, -44, 0, 14)
+    SelCap.Position = UDim2.new(0, 36, 0, 5)
     SelValue = NewLabel(SelectedCard, "Belum dipilih", 12, Enum.Font.GothamBold, Colors.Text)
-    SelValue.Size = UDim2.new(1, -20, 0, 16)
-    SelValue.Position = UDim2.new(0, 10, 0, 18)
+    SelValue.Size = UDim2.new(1, -44, 0, 16)
+    SelValue.Position = UDim2.new(0, 36, 0, 19)
+    SelValue.TextTruncate = Enum.TextTruncate.AtEnd
 
     local PickList = Instance.new("ScrollingFrame", AutoBuyTab)
-    PickList.Size = UDim2.new(1, 0, 1, -44)
-    PickList.Position = UDim2.new(0, 0, 0, 44)
+    PickList.Size = UDim2.new(1, 0, 1, -48)
+    PickList.Position = UDim2.new(0, 0, 0, 48)
     PickList.BackgroundTransparency = 1
     StyleScrollbar(PickList)
     local PickLayout = Instance.new("UIListLayout", PickList)
@@ -1986,7 +2103,7 @@ do
         PriceLbl.Position = UDim2.new(0.6, -10, 0, 0)
         table.insert(PickRows, { name = pk.name, Btn = OptionBtn, Stroke = RowStroke, NameLbl = NameLbl })
         OptionBtn.MouseEnter:Connect(function()
-            if not (autoBuyEnabled and targetPickaxeName == pk.name) then OptionBtn.BackgroundColor3 = Colors.SwitchOff end
+            if not (autoBuyEnabled and targetPickaxeName == pk.name) then OptionBtn.BackgroundColor3 = Colors.Tile end
         end)
         OptionBtn.MouseLeave:Connect(function()
             if not (autoBuyEnabled and targetPickaxeName == pk.name) then OptionBtn.BackgroundColor3 = Colors.GlassPanel end
@@ -2022,6 +2139,8 @@ ShowTab = function(name)
     SetHomeActive(name == "home")
     SetAutoBuyActive(name == "buy")
     SetSettingsActive(name == "settings")
+    local titles = { home = "Monitor", buy = "Auto Buy", settings = "Pengaturan" }
+    UI.PageTitle.Text = titles[name] or ""
 end
 HomeBtn.MouseButton1Click:Connect(function() ShowTab("home") end)
 AutoBuyBtn.MouseButton1Click:Connect(function() ShowTab("buy") end)
@@ -2067,20 +2186,10 @@ do
         if isDragging then return end
         MainFrame.Visible = not MainFrame.Visible
     end)
-    MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
+    UI.MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
 end
 
 -- ═══════════ [ PENYEGAR TAMPILAN (BACA-SAJA) ] ═══════════
-local ProgressValue = Instance.new("NumberValue")
-local idleMode = true
-ProgressValue.Changed:Connect(function(p)
-    SetRing(p)
-    if not idleMode then PercentLbl.Text = math.floor(p * 100 + 0.0001) .. "%" end
-end)
-local function SetProgress(p)
-    TweenService:Create(ProgressValue, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Value = p}):Play()
-end
-
 local function pctOf(cur, tgt)
     if tgt and tgt > 0 then return math.clamp(cur / tgt, 0, 1) end
     return 0
@@ -2137,105 +2246,62 @@ local function computeView()
 end
 
 local function ApplyView(v)
-    idleMode = v.idle == true
-    RightStroke.Color = v.color
-    LeftStroke.Color = v.color
-    SetProgress(v.pct)
-    if idleMode then PercentLbl.Text = "—" end
-    SubLbl.Text = v.sub
-    SubLbl.TextColor3 = v.color
-    CaptionLbl.Text = v.caption
-
-    local currentSteps = {}
-    if is_monitoring then
-        currentSteps = {
-            { name = "Income", icon = "coin" },
-            { name = "Speed", icon = "bolt" },
-            { name = "Kapak", icon = "pickaxe" }
-        }
-    elseif autoBuyEnabled then
-        currentSteps = {
-            { name = "Pickaxe", icon = "pickaxe" }
-        }
-    end
-
-    for i, pill in ipairs(StepPills) do
-        local stepData = currentSteps[i]
-        if stepData then
-            pill.Frame.Visible = true
-            pill.Label.Text = stepData.name
-            
-            if pill.Icon and pill.Icon.Parent then pill.Icon:Destroy() end
-            local newIcon = MakeIcon(pill.Label.Parent, stepData.icon, 12, Colors.TextDim)
-            newIcon.LayoutOrder = 1
-            pill.Icon = newIcon
-            
-            local done = (v.idx == 4 or v.idx > i)
-            pill.Icon.Visible = not done
-            pill.Check.Visible = done
-            
-            if done then
-                pill.Frame.BackgroundColor3 = Colors.GlassPanel
-                pill.Label.TextColor3 = Colors.Green
-            elseif v.idx == i then
-                pill.Frame.BackgroundColor3 = Colors.ChipOn
-                pill.Label.TextColor3 = v.color
-                SetIconColor(pill.Icon, v.color)
-            else
-                pill.Frame.BackgroundColor3 = Colors.GlassPanel
-                pill.Label.TextColor3 = Colors.TextDim
-                SetIconColor(pill.Icon, Colors.TextDim)
-            end
-        else
-            pill.Frame.Visible = false
-        end
-    end
-
-    -- ⭐ layout Monitor: kartu profil + bar progres hanya saat ada target aktif
-    local active = is_monitoring or autoBuyEnabled
-    UI.Card.Visible = active
+    -- kartu profil aktif
     if is_monitoring then
         UI.CardName.Text = tostring(activeProfileName)
         UI.CardSub.Text = "Kapak target: " .. tostring(targetPickaxeName)
+        UI.TgtInc.Text = formatNumber(targetIncome)
+        UI.TgtSpd.Text = formatNumber(targetSpeedValue)
     elseif autoBuyEnabled then
         UI.CardName.Text = "Auto Buy"
         UI.CardSub.Text = tostring(targetPickaxeName)
+        UI.TgtInc.Text = "—"
+        UI.TgtSpd.Text = "—"
+    else
+        UI.CardName.Text = "Belum ada profil"
+        UI.CardSub.Text = "Pilih di tab Pengaturan"
+        UI.TgtInc.Text = "—"
+        UI.TgtSpd.Text = "—"
     end
-    RingHolder.Position = active and UDim2.new(0.5, -RING_SIZE / 2, 0, 72) or UDim2.new(0.5, -RING_SIZE / 2, 0, 16)
-    CaptionLbl.Position = active and UDim2.new(0, 0, 0, 184) or UDim2.new(0, 0, 0, 130)
-    UI.EmptyBtn.Visible = not active
 
-    local slot = 0
+    -- kartu status (angka langsung)
+    local money_str, speed_str = getMyData()
+    UI.StCash.Text = formatNumber(getRealCash())
+    UI.StInc.Text = tostring(money_str)
+    UI.StSpd.Text = tostring(speed_str)
+
+    -- kartu progres
+    UI.ProgCap.Text = v.idle and "Idle" or tostring(v.caption)
+    UI.ProgCap.TextColor3 = v.color
     for _, def in ipairs(UI.BarDefs) do
         local b = v.bars and v.bars[def.key]
         local r = UI.Bars[def.key]
+        local pct = b and math.clamp(b.pct, 0, 1) or 0
         if b then
-            slot = slot + 1
-            r.Row.Visible = true
-            r.Row.Position = UDim2.new(0, 0, 0, 206 + (slot - 1) * 22)
-            r.Val.Text = b.text
-            TweenService:Create(r.Fill, TweenInfo.new(0.4), { Size = UDim2.new(math.clamp(b.pct, 0, 1), 0, 1, 0) }):Play()
+            r.Val.Text = (b.text == "Selesai") and "Selesai" or (math.floor(pct * 100 + 0.0001) .. "%")
         else
-            r.Row.Visible = false
+            r.Val.Text = "—"
         end
+        TweenService:Create(r.Fill, TweenInfo.new(0.4), { Size = UDim2.new(pct, 0, 1, 0) }):Play()
     end
 
     -- titik hijau di tab Monitor saat sedang di tab lain
     MonitorBadge.Visible = is_monitoring and not HomeTab.Visible
 
+    -- pill header + status di sidebar
+    local label, color
     if is_monitoring then
-        PillLbl.Text = "Memantau"
-        PillLbl.TextColor3 = Colors.Green
-        PillDot.BackgroundColor3 = Colors.Green
+        label, color = "Memantau", Colors.Green
     elseif autoBuyEnabled then
-        PillLbl.Text = "Auto Buy"
-        PillLbl.TextColor3 = Colors.Amber
-        PillDot.BackgroundColor3 = Colors.Amber
+        label, color = "Auto Buy", Colors.Amber
     else
-        PillLbl.Text = "Idle"
-        PillLbl.TextColor3 = Colors.TextDim
-        PillDot.BackgroundColor3 = Colors.TextDim
+        label, color = "Idle", Colors.TextDim
     end
+    UI.PillLbl.Text = label
+    UI.PillLbl.TextColor3 = color
+    UI.PillDot.BackgroundColor3 = color
+    UI.SideStatus.Text = label
+    UI.SideStatus.TextColor3 = is_monitoring and Colors.Accent or color
 
     SelValue.Text = autoBuyEnabled and (tostring(targetPickaxeName) .. "  •  " .. formatNumber(targetBuyPrice)) or "Belum dipilih"
     PaintPickaxeRows()
@@ -2261,12 +2327,6 @@ task.spawn(function()
         local money_str, speed_str = getMyData()
         local money_num = parseNumber(money_str)
         updateSpeedActivity(speed_str)
-        
-        if is_monitoring then
-            StatusLbl.Text = "Memantau: " .. tostring(activeProfileName) .. " (" .. tostring(money_str) .. " / " .. tostring(formatNumber(targetIncome)) .. ")"
-        else
-            StatusLbl.Text = "Status: Pilih profil di tab Pengaturan."
-        end
         
         if is_monitoring then
             local speed_num = parseNumber(speed_str)
