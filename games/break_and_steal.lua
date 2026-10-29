@@ -571,6 +571,21 @@ local function updateSpeedActivity(speed_str)
     lastSpeedSeen = cur
 end
 
+-- ⭐ DETEKSI TREADMILL VIA REMOTE (akurat, tidak terpengaruh pembulatan)
+local lastSpeedGainTime = 0
+task.spawn(function()
+    local remote = ReplicatedStorage:WaitForChild("SpeedGainRemote", 30)
+    if not remote then
+        warn("❌ SpeedGainRemote nggak ketemu, fallback ke deteksi lama")
+        return
+    end
+    remote.OnClientEvent:Connect(function(gain, total)
+        if not isCurrent() then return end
+        lastSpeedGainTime = os.clock()
+        lastSpeedIncreaseTime = os.clock()  -- ini yang dibaca tickIdleRespawn
+    end)
+end)
+
 -- ⭐ AUTO RESPAWN IF IDLE (hanya jalan saat monitor / auto buy aktif)
 local function tickIdleRespawn()
     if not isAutoRespawnIdle and not isAutoRespawnLocked then return end
@@ -2370,13 +2385,12 @@ task.spawn(function()
                 if is_monitoring then isAllowedToJump = true end
             end
             if isAllowedToJump then
-                local currentSpeedNum = parseNumber(speed_str) 
-                if currentSpeedNum > lastSpeedCheck then
-                    if not hasSpeedIncreased then
-                        hasSpeedIncreased = true
-                    end
+                local gainedNow = lastSpeedGainTime > lastSpeedCheck
+                    and (os.clock() - lastSpeedGainTime) <= (INTERVAL + 1)
+                if gainedNow then
+                    hasSpeedIncreased = true
                     stuckTimer = 0
-                    lastSpeedCheck = currentSpeedNum
+                    lastSpeedCheck = lastSpeedGainTime
                 else
                     if hasSpeedIncreased then stuckTimer = stuckTimer + INTERVAL end
                 end
