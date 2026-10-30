@@ -453,19 +453,20 @@ local function getMyData()
 end
 
 local function getRealCash()
+    -- sumber utama: attribute mentah (angka asli, tanpa parsing suffix)
+    local c = player:GetAttribute("Cash")
+    if type(c) == "number" then return c end
+
+    -- fallback: parsing teks HUD
     local pg = player:FindFirstChild("PlayerGui")
-    if not pg then return 0 end
-    local mainGui = pg:FindFirstChild("MainGUI")
-    if not mainGui then return 0 end
-    local currencies = mainGui:FindFirstChild("Currencies")
-    if not currencies then return 0 end
-    local cashObj = currencies:FindFirstChild("Cash")
-    if not cashObj then return 0 end
-    local amountText = cashObj:FindFirstChild("Amount")
-    if not amountText or not amountText:IsA("TextLabel") then return 0 end
-    local rawText = amountText.Text
-    local numberPart = rawText:match("%$(.*)")
-    if numberPart then return parseNumber(numberPart:gsub("%s", "")) end
+    local mainGui = pg and pg:FindFirstChild("MainGUI")
+    local currencies = mainGui and mainGui:FindFirstChild("Currencies")
+    local cashObj = currencies and currencies:FindFirstChild("Cash")
+    local amountText = cashObj and cashObj:FindFirstChild("Amount")
+    if amountText and amountText:IsA("TextLabel") then
+        local numberPart = amountText.Text:match("%$(.*)")
+        if numberPart then return parseNumber(numberPart) end
+    end
     return 0
 end
 
