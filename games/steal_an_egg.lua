@@ -1,5 +1,7 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg (v40 - Auto Resume After Hop)
+-- 🥚 V-Ziir0 Hub: Steal An Egg (v42 - + kontrol Auto Place Ajjans & Venyx)
+-- v41: Auto Place All di hub Ajjans ikut nyala (< 15M) / mati (>= 15M).
+-- v42: Auto place di hub Venyx juga ikut nyala/mati (lewat objek library Venyx).
 -- v40: setelah server hop, script otomatis jalan lagi dan MELANJUTKAN monitor
 --      beserta daftar target dari server sebelumnya (config dibaca dari file).
 -- UI sama dengan v39. Logika sniper/auto place/webhook tidak diubah.
@@ -189,6 +191,356 @@ _G.setNasiRendangAutoPlace = function(state)
     print("🔄 [Nasi Rendang] Auto Place All Egg -> " .. tostring(state))
     return true
 end
+
+-- ═══════════ [ FUNGSI AJJANS ] ═══════════
+-- Cari toggle "Auto Place All" di UI Ajjans lalu hidup/matikan tanpa mouse
+-- (tetap jalan walau UI Ajjans ditutup). Hasil scan di-cache; scan ulang
+-- maksimal tiap 5 detik kalau toggle belum/tidak lagi ketemu.
+local Ajjans = { label = nil, toggle = nil, row = nil, lastScan = 0, busy = false, lastClick = 0, warned = false }
+local AJJANS_TEXT = "auto place all"   -- teks label persis (huruf kecil)
+
+local function ajjansRoots()
+    local roots = {}
+    pcall(function() if gethui then table.insert(roots, gethui()) end end)
+    pcall(function() table.insert(roots, game:GetService("CoreGui")) end)
+    pcall(function()
+        local pg = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+        if pg then table.insert(roots, pg) end
+    end)
+    return roots
+end
+
+local function ajjansFindLabel()
+    for _, root in ipairs(ajjansRoots()) do
+        local ok, desc = pcall(function() return root:GetDescendants() end)
+        if ok then
+            for _, d in ipairs(desc) do
+                if d:IsA("TextLabel") or d:IsA("TextButton") then
+                    local okT, t = pcall(function() return (d.ContentText ~= "" and d.ContentText) or d.Text or "" end)
+                    if okT then
+                        t = string.lower(t):gsub("^%s+", ""):gsub("%s+$", "")
+                        if t == AJJANS_TEXT then return d end
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function ajjansFindToggle(label)
+    local row = label.Parent
+    for _ = 1, 3 do
+        if not row then break end
+        local best
+        for _, d in ipairs(row:GetDescendants()) do
+            if d ~= label and d:IsA("GuiObject") then
+                local isBtn = d:IsA("GuiButton")
+                local sz = d.AbsoluteSize
+                local pill = sz.X > 0 and sz.X <= 80 and sz.Y <= 40 and sz.X >= sz.Y
+                if (isBtn or pill) and d.AbsolutePosition.X > label.AbsolutePosition.X then
+                    if not best or (isBtn and not best:IsA("GuiButton")) then best = d end
+                end
+            end
+        end
+        if best then return best, row end
+        if row:IsA("GuiButton") then return row, row end
+        row = row.Parent
+    end
+end
+
+local function ajjansIsRed(c) return c.R > 0.6 and c.G < 0.35 and c.B < 0.35 end
+
+local function ajjansReadState(toggle)
+    -- toggle Ajjans: merah = ON, gelap = OFF
+    if ajjansIsRed(toggle.BackgroundColor3) and toggle.BackgroundTransparency < 0.9 then return true end
+    for _, d in ipairs(toggle:GetDescendants()) do
+        if d:IsA("GuiObject") and d.BackgroundTransparency < 0.9 and d.AbsoluteSize.X > toggle.AbsoluteSize.X * 0.6 then
+            if ajjansIsRed(d.BackgroundColor3) then return true end
+        end
+        if d:IsA("ImageLabel") and ajjansIsRed(d.ImageColor3) and d.ImageTransparency < 0.9 then return true end
+    end
+    -- fallback: posisi knob (kanan = ON)
+    for _, d in ipairs(toggle:GetDescendants()) do
+        if d:IsA("Frame") and d.AbsoluteSize.X <= toggle.AbsoluteSize.X * 0.6 then
+            local mid = toggle.AbsolutePosition.X + toggle.AbsoluteSize.X / 2
+            return (d.AbsolutePosition.X + d.AbsoluteSize.X / 2) > mid
+        end
+    end
+    return false
+end
+
+local ajjansFakeInput = {
+    UserInputType = Enum.UserInputType.MouseButton1,
+    UserInputState = Enum.UserInputState.Begin,
+    Position = Vector3.zero, KeyCode = Enum.KeyCode.Unknown,
+}
+
+local function ajjansFire(sig, ...)
+    local args = { ... }
+    local fired = false
+    if getconnections then
+        local ok, conns = pcall(getconnections, sig)
+        if ok then
+            for _, c in ipairs(conns) do
+                pcall(function()
+                    if c.Function then c.Function(table.unpack(args)) else c:Fire(table.unpack(args)) end
+                end)
+                fired = true
+            end
+        end
+    end
+    if not fired and firesignal then
+        fired = pcall(firesignal, sig, table.unpack(args))
+    end
+    return fired
+end
+
+local function ajjansClick(obj)
+    local done = false
+    if obj:IsA("GuiButton") then
+        done = ajjansFire(obj.MouseButton1Click)
+        if not done then done = ajjansFire(obj.Activated, ajjansFakeInput, 1) end
+        if not done then done = ajjansFire(obj.MouseButton1Down, 0, 0) end
+    end
+    if not done then
+        done = ajjansFire(obj.InputBegan, ajjansFakeInput)
+        if done then
+            local ended = table.clone(ajjansFakeInput); ended.UserInputState = Enum.UserInputState.End
+            ajjansFire(obj.InputEnded, ended)
+        end
+    end
+    return done
+end
+
+local function ajjansSetup(force)
+    if Ajjans.toggle and Ajjans.toggle.Parent and not force then return true end
+    if not force and (os.clock() - Ajjans.lastScan) < 5 then return false end
+    Ajjans.lastScan = os.clock()
+    Ajjans.label = ajjansFindLabel()
+    if not Ajjans.label then Ajjans.toggle = nil; return false end
+    Ajjans.toggle, Ajjans.row = ajjansFindToggle(Ajjans.label)
+    if Ajjans.toggle then print("✅ [Ajjans] Toggle 'Auto Place All' ketemu: " .. Ajjans.toggle:GetFullName()) end
+    return Ajjans.toggle ~= nil
+end
+
+local function getAjjansAutoPlaceState()
+    if not ajjansSetup(false) then return nil end
+    local ok, v = pcall(ajjansReadState, Ajjans.toggle)
+    if ok then return v end
+    return nil
+end
+
+-- Non-blocking: aman dipanggil tiap detik dari loop monitor
+local function setAjjansAutoPlace(state)
+    if Ajjans.busy then return true end
+    if not ajjansSetup(false) then
+        if not Ajjans.warned then
+            Ajjans.warned = true
+            warn("[Ajjans] Toggle 'Auto Place All' belum ketemu (abaikan kalau tidak pakai Ajjans; buka tab Automation Ajjans sekali kalau pakai).")
+        end
+        return false
+    end
+    local okS, cur = pcall(ajjansReadState, Ajjans.toggle)
+    if okS and cur == state then return true end
+    if (os.clock() - Ajjans.lastClick) < 1.5 then return true end  -- tunggu UI update dulu
+    Ajjans.busy = true
+    Ajjans.lastClick = os.clock()
+    task.spawn(function()
+        pcall(function()
+            local t = Ajjans.toggle
+            ajjansClick(t)
+            task.wait(0.15)
+            if ajjansReadState(t) ~= state then
+                for _, d in ipairs(t:GetDescendants()) do
+                    if d:IsA("GuiButton") then
+                        ajjansClick(d); task.wait(0.15)
+                        if ajjansReadState(t) == state then break end
+                    end
+                end
+            end
+            if ajjansReadState(t) ~= state and Ajjans.row then ajjansClick(Ajjans.row) end
+            print("🔄 [Ajjans] Auto Place All -> " .. (ajjansReadState(t) and "ON" or "OFF"))
+        end)
+        Ajjans.busy = false
+    end)
+    return true
+end
+_G.setAjjansAutoPlace = setAjjansAutoPlace
+
+-- ═══════════ [ FUNGSI VENYX ] ═══════════
+-- Toggle "Auto place" Venyx diubah lewat objek library-nya (getgc -> :Set),
+-- status dibaca dari knob toggle di UI (kanan = ON). Jalan walau UI Venyx
+-- ditutup/minimize. Scan UI maks tiap 5 dtk, scan getgc maks tiap 15 dtk.
+local Venyx = { toggle = nil, lastScan = 0, lib = nil, libFn = nil, lastGc = 0,
+                busy = false, lastClick = 0, lastSent = nil, warned = false }
+local VENYX_TEXT = "auto place"   -- teks label persis (huruf kecil)
+
+local function venyxTextOf(d)
+    local ok, t = pcall(function()
+        return (d.ContentText ~= nil and d.ContentText ~= "" and d.ContentText) or d.Text or ""
+    end)
+    if not ok then return "" end
+    return (string.lower(t):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function venyxFindKnob(pill)
+    local ps = pill.AbsoluteSize
+    for _, d in ipairs(pill:GetDescendants()) do
+        if d:IsA("Frame") or d:IsA("ImageLabel") or d:IsA("ImageButton") or d:IsA("TextButton") then
+            local sz = d.AbsoluteSize
+            if sz.X > 4 and math.abs(sz.X - sz.Y) <= 4 and sz.Y <= ps.Y + 2 and sz.X < ps.X * 0.75 then
+                return d
+            end
+        end
+    end
+end
+
+local function venyxIsPill(d)
+    if not d:IsA("GuiObject") then return false end
+    local sz = d.AbsoluteSize
+    return sz.X >= 28 and sz.X <= 100 and sz.Y >= 12 and sz.Y <= 44 and sz.X >= sz.Y * 1.4 and venyxFindKnob(d) ~= nil
+end
+
+local function venyxFindToggle(label)
+    local lc = label.AbsolutePosition.Y + label.AbsoluteSize.Y / 2
+    local row = label.Parent
+    for _ = 1, 3 do
+        if not row then break end
+        for _, d in ipairs(row:GetDescendants()) do
+            if d ~= label and venyxIsPill(d) and d.AbsolutePosition.X > label.AbsolutePosition.X then
+                local dc = d.AbsolutePosition.Y + d.AbsoluteSize.Y / 2
+                if math.abs(dc - lc) <= 24 then return d end
+            end
+        end
+        row = row.Parent
+    end
+end
+
+local function venyxSetupUI()
+    if Venyx.toggle and Venyx.toggle.Parent then return true end
+    if (os.clock() - Venyx.lastScan) < 5 then return false end
+    Venyx.lastScan = os.clock()
+    Venyx.toggle = nil
+    local bestArea = -1
+    for _, root in ipairs(ajjansRoots()) do
+        local ok, desc = pcall(function() return root:GetDescendants() end)
+        if ok then
+            for _, l in ipairs(desc) do
+                if (l:IsA("TextLabel") or l:IsA("TextButton")) and venyxTextOf(l) == VENYX_TEXT then
+                    local okT, t = pcall(venyxFindToggle, l)
+                    if okT and t then
+                        local g = l:FindFirstAncestorWhichIsA("LayerCollector")
+                        local w = l
+                        while w.Parent and w.Parent ~= g do w = w.Parent end
+                        local area = w:IsA("GuiObject") and (w.AbsoluteSize.X * w.AbsoluteSize.Y) or 0
+                        if area > bestArea then   -- window utama, bukan Quick Bar
+                            bestArea = area
+                            Venyx.toggle = t
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if Venyx.toggle then print("✅ [Venyx] Toggle UI 'Auto place' ketemu: " .. Venyx.toggle:GetFullName()) end
+    return Venyx.toggle ~= nil
+end
+
+-- true/false kalau toggle UI terbaca, nil kalau belum ketemu
+local function venyxReadState()
+    if not venyxSetupUI() then return nil end
+    local ok, v = pcall(function()
+        local t = Venyx.toggle
+        local knob = venyxFindKnob(t)
+        if not knob then return nil end
+        local w = t.AbsoluteSize.X
+        local x = knob.Position.X.Scale * w + knob.Position.X.Offset
+        local center = x - knob.AnchorPoint.X * knob.AbsoluteSize.X + knob.AbsoluteSize.X / 2
+        return center > w / 2
+    end)
+    if ok then return v end
+    return nil
+end
+
+local function venyxFindLib(force)
+    if Venyx.lib and not force then return true end
+    if not getgc then return false end
+    if not force and (os.clock() - Venyx.lastGc) < 15 then return false end
+    Venyx.lastGc = os.clock()
+    Venyx.lib, Venyx.libFn = nil, nil
+    local names = { "Set", "SetValue", "SetState", "Toggle", "set", "setValue", "SetToggle" }
+    local ok, gc = pcall(getgc, true)
+    if not ok then return false end
+    for _, t in ipairs(gc) do
+        if type(t) == "table" then
+            local hit = false
+            pcall(function()
+                for _, v in pairs(t) do
+                    if type(v) == "string" and string.lower(v) == VENYX_TEXT then hit = true; break end
+                end
+            end)
+            if hit then
+                for _, fn in ipairs(names) do
+                    local f
+                    pcall(function() f = t[fn] end)
+                    if type(f) == "function" then
+                        Venyx.lib, Venyx.libFn = t, fn
+                        print("✅ [Venyx] Objek library 'Auto place' ketemu (fungsi: " .. fn .. ")")
+                        return true
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function getVenyxAutoPlaceState()
+    return venyxReadState()
+end
+
+-- Non-blocking: aman dipanggil tiap detik dari loop monitor
+local function setVenyxAutoPlace(state)
+    if Venyx.busy then return true end
+    local cur = venyxReadState()
+    if cur == state then Venyx.lastSent = state; return true end
+    -- UI tidak terbaca → hanya kirim saat target berubah (hindari spam :Set)
+    if cur == nil and Venyx.lastSent == state then return true end
+    if (os.clock() - Venyx.lastClick) < 1.5 then return true end
+    if not Venyx.lib and (os.clock() - Venyx.lastGc) < 15 then
+        return false   -- getgc baru saja gagal, tunggu jeda dulu
+    end
+    Venyx.busy = true
+    Venyx.lastClick = os.clock()
+    task.spawn(function()
+        pcall(function()
+            if not venyxFindLib(false) then
+                if not Venyx.warned then
+                    Venyx.warned = true
+                    warn("[Venyx] Toggle 'Auto place' belum ketemu (abaikan kalau tidak pakai Venyx; kalau pakai, buka UI Venyx di tab Farm > Pen sekali).")
+                end
+                return
+            end
+            pcall(function() Venyx.lib[Venyx.libFn](Venyx.lib, state) end)
+            task.wait(0.35)
+            local after = venyxReadState()
+            if after ~= nil and after ~= state then
+                -- objek lama mungkin sudah tidak valid (UI di-reload), cari ulang
+                if venyxFindLib(true) then
+                    pcall(function() Venyx.lib[Venyx.libFn](Venyx.lib, state) end)
+                    task.wait(0.35)
+                    after = venyxReadState()
+                end
+            end
+            Venyx.lastSent = state
+            local shown = (after == nil) and (state and "ON (terkirim)" or "OFF (terkirim)") or (after and "ON" or "OFF")
+            print("🔄 [Venyx] Auto place -> " .. shown)
+        end)
+        Venyx.busy = false
+    end)
+    return true
+end
+_G.setVenyxAutoPlace = setVenyxAutoPlace
 
 -- ═══════════ [ FUNGSI SCAN PLAYER ] ═══════════
 local function scanCurrentPlayers()
@@ -940,9 +1292,11 @@ local monitorToggle = CreateChipToggle(ChipsRow, "Monitor Egg", "egg", 1, config
     is_monitoring = state
     
     if state then
-        -- ⭐ NYALAIN AUTO PLACE (DUA-DUANYA)
+        -- ⭐ NYALAIN AUTO PLACE (BigFroot + Nasi Rendang + Ajjans + Venyx)
         setBigFrootAutoPlace(true) 
         _G.setNasiRendangAutoPlace(true) 
+        setAjjansAutoPlace(true)
+        setVenyxAutoPlace(true)
         
         if webhookToggle then webhookToggle.SetState(false) end 
         config.WebhookEnabled = false 
@@ -954,11 +1308,13 @@ local monitorToggle = CreateChipToggle(ChipsRow, "Monitor Egg", "egg", 1, config
         for _, n in ipairs(initial) do table.insert(config.DetectedTargets, n) end
         print("📋 [Target] Snapshot awal: " .. #config.DetectedTargets .. " player.")
         
-        StarterGui:SetCore("SendNotification", {Title = "Monitor Egg ON", Text = "Auto Place (BigFroot + Nasi Rendang) aktif.", Duration = 5})
+        StarterGui:SetCore("SendNotification", {Title = "Monitor Egg ON", Text = "Auto Place (BigFroot, Nasi Rendang, Ajjans, Venyx) aktif.", Duration = 5})
     else
-        -- ⭐ MATIIN AUTO PLACE (DUA-DUANYA)
+        -- ⭐ MATIIN AUTO PLACE (BigFroot + Nasi Rendang + Ajjans + Venyx)
         setBigFrootAutoPlace(false) 
         _G.setNasiRendangAutoPlace(false)
+        setAjjansAutoPlace(false)
+        setVenyxAutoPlace(false)
         
         StarterGui:SetCore("SendNotification", {Title = "Monitor Egg OFF", Text = "Monitor & Auto Place berhenti.", Duration = 3})
     end
@@ -1443,6 +1799,8 @@ local function computeView()
     end
     if not is_monitoring then
         local flag = bigFrootPlaceState()
+        if flag == nil then flag = getAjjansAutoPlaceState() end
+        if flag == nil then flag = getVenyxAutoPlaceState() end
         v.place = flag == true
         return v
     end
@@ -1489,6 +1847,8 @@ local function computeView()
         end
     end
     local flag = bigFrootPlaceState()
+    if flag == nil then flag = getAjjansAutoPlaceState() end
+    if flag == nil then flag = getVenyxAutoPlaceState() end
     if flag ~= nil then v.place = flag end
     return v
 end
@@ -1744,12 +2104,16 @@ task.spawn(function()
                     setBigFrootAutoPlace(true)
                 end
                 _G.setNasiRendangAutoPlace(true)
+                setAjjansAutoPlace(true)
+                setVenyxAutoPlace(true)
             else
                 -- Speed >= 15M: Auto Place MATI
                 if getgenv().__BigFrootSAE and getgenv().__BigFrootSAE.Flags and getgenv().__BigFrootSAE.Flags.AutoPlaceAll then
                     setBigFrootAutoPlace(false)
                 end
                 _G.setNasiRendangAutoPlace(false)
+                setAjjansAutoPlace(false)
+                setVenyxAutoPlace(false)
             end
 
             if sniperCounter % 10 == 0 then
