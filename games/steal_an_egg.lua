@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg (v49 - UI sidebar + kartu ala Break & Steal)
+-- 🥚 V-Ziir0 Hub: Steal An Egg (v51 - tombol bulat juga buka mode mini)
 -- v41: Auto Place All di hub Ajjans ikut nyala (< 15M) / mati (>= 15M).
 -- v42: Auto place di hub Venyx juga ikut nyala/mati (lewat objek library Venyx).
 -- v43: Venyx: kalau :Set tidak mempan → klik toggle langsung; log status di F9.
@@ -7,6 +7,8 @@
 -- v46: Map terakhir & daftar egg otomatis dari ReplicatedStorage.Data.Areas.Configs;
 --      egg dihitung dari Tool di Backpack + karakter (nama Tool = nama pet).
 -- v47: fungsi Ajjans/Venyx/EggData dibungkus do...end (batas 200 local Luau).
+-- v51: tombol bulat: tutup panel → mode mini muncul; buka lagi → mode mini hilang.
+-- v50: notifikasi custom (kanan bawah) + mode mini saat panel di-minimize.
 -- v49: UI baru: sidebar (Monitor/Egg/Server), header, kartu 2 kolom, footer status.
 -- v48: egg = grid tas ("<Map> Egg", UI) + hotbar (Tool "<Pet> Egg"); pet tidak dihitung.
 -- v40: setelah server hop, script otomatis jalan lagi dan MELANJUTKAN monitor
@@ -16,7 +18,7 @@
 
 -- ⭐ TUNGGU GAME SIAP (penting saat dijalankan otomatis setelah teleport)
 if not game:IsLoaded() then game.Loaded:Wait() end
-print("🥚 V-Ziir0 Steal An Egg v49 dimuat")
+print("🥚 V-Ziir0 Steal An Egg v51 dimuat")
 
 -- ⭐ SISTEM ANTI-DOUBLE
 if _G.StealEgg_Hub_Active then
@@ -1164,7 +1166,7 @@ do
     local Icons = {
         egg = "", monitor = "", target = "", close = "", minus = "", check = "", checkc = "",
         hourglass = "", bolt = "", user = "", hop = "", send = "", scan = "", backpack = "", refresh = "",
-        server = "", copy = "", login = "", chevron = "", lock = "", clock = "",
+        server = "", copy = "", login = "", chevron = "", lock = "", clock = "", xc = "",
     }
     local IconPaint = setmetatable({}, { __mode = "k" })
 
@@ -1222,6 +1224,7 @@ do
         chevron = function(H) H.line(4, 6, 8, 10, 1.6); H.line(8, 10, 12, 6, 1.6) end,
         lock = function(H) H.rect(3, 7.5, 10, 6.5, 0.2); H.ring(4.8, 1.8, 6.4, 7.4, 1.5) end,
         clock = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.line(8, 4.4, 8, 8, 1.5); H.line(8, 8, 10.8, 9.6, 1.5) end,
+        xc = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.line(5.6, 5.6, 10.4, 10.4, 1.5); H.line(10.4, 5.6, 5.6, 10.4, 1.5) end,
     }
 
     MakeIcon = function(parent, key, size, color)
@@ -1337,6 +1340,167 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = CoreGui
 _G.StealEgg_Hub_UI = ScreenGui
+
+-- ═══════════ [ NOTIFIKASI CUSTOM (kanan bawah, bertumpuk) ] ═══════════
+-- showNotif(judul, isi, durasi). Gagal membangun → fallback ke notifikasi Roblox.
+local showNotif
+do
+    local NOTIF_W, NOTIF_H = 300, 64
+    local MAX_NOTIFS = 4
+
+    local NotifHolder = Instance.new("Frame")
+    NotifHolder.Name = "NotifHolder"
+    NotifHolder.AnchorPoint = Vector2.new(1, 1)
+    NotifHolder.Position = UDim2.new(1, -16, 1, -16)
+    NotifHolder.Size = UDim2.new(0, NOTIF_W, 0, 420)
+    NotifHolder.BackgroundTransparency = 1
+    NotifHolder.Parent = ScreenGui
+
+    local NotifLayout = Instance.new("UIListLayout", NotifHolder)
+    NotifLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    NotifLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+    NotifLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    NotifLayout.Padding = UDim.new(0, 8)
+
+    local NotifScale = Instance.new("UIScale", NotifHolder)
+    local function UpdateNotifScale()
+        local vp = ScreenGui.AbsoluteSize
+        if vp.X < 50 then return end
+        NotifScale.Scale = math.clamp(math.min(1, (vp.X - 32) / NOTIF_W, vp.Y / 500), 0.6, 1)
+    end
+    UpdateNotifScale()
+    ScreenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateNotifScale)
+
+    local notifOrder = 0
+    local activeNotifs = {}
+
+    -- ikon & warna dari kata kunci judul
+    local function notifStyle(title)
+        local up = tostring(title):upper()
+        if up:find("TERCAPAI", 1, true) or up:find("TERSALIN", 1, true) or up:find("DIPULIHKAN", 1, true) then
+            return "checkc", Colors.Green
+        elseif up:find("GAGAL", 1, true) or up:find("ERROR", 1, true) then
+            return "xc", Colors.Danger
+        elseif up:find("HOP", 1, true) or up:find("MASIH ADA", 1, true) or up:find("SERVER", 1, true) then
+            return "hop", Colors.Amber
+        elseif up:find("OFF", 1, true) or up:find("TERKUNCI", 1, true) then
+            return "lock", Colors.Amber
+        elseif up:find("WEBHOOK", 1, true) then
+            return "send", Colors.Accent
+        elseif up:find("TARGET", 1, true) then
+            return "scan", Colors.Accent
+        end
+        return "egg", Colors.Accent
+    end
+
+    local function dismissNotif(entry)
+        if entry.closed then return end
+        entry.closed = true
+        for i, e in ipairs(activeNotifs) do
+            if e == entry then table.remove(activeNotifs, i) break end
+        end
+        local out = TweenService:Create(entry.card, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            Position = UDim2.new(0, NOTIF_W + 40, 0, 0)
+        })
+        out:Play()
+        out.Completed:Connect(function()
+            local collapse = TweenService:Create(entry.wrap, TweenInfo.new(0.15), { Size = UDim2.new(1, 0, 0, 0) })
+            collapse:Play()
+            collapse.Completed:Connect(function() entry.wrap:Destroy() end)
+        end)
+    end
+
+    local function buildNotif(title, text, duration)
+        duration = duration or 5
+        local iconKey, color = notifStyle(title)
+
+        notifOrder = notifOrder + 1
+        local wrap = Instance.new("Frame")
+        wrap.BackgroundTransparency = 1
+        wrap.Size = UDim2.new(1, 0, 0, NOTIF_H)
+        wrap.LayoutOrder = notifOrder
+        wrap.Parent = NotifHolder
+
+        local card = Instance.new("TextButton")
+        card.AutoButtonColor = false
+        card.Text = ""
+        card.Size = UDim2.new(1, 0, 1, 0)
+        card.Position = UDim2.new(0, NOTIF_W + 40, 0, 0)
+        card.BackgroundColor3 = Colors.Background
+        card.BackgroundTransparency = 0.03
+        card.BorderSizePixel = 0
+        card.Parent = wrap
+        Instance.new("UICorner", card).CornerRadius = UDim.new(0, 12)
+        local stroke = Instance.new("UIStroke", card)
+        stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        stroke.Color = Colors.Border
+        stroke.Thickness = 1
+
+        local bar = Instance.new("Frame", card)
+        bar.Size = UDim2.new(0, 4, 1, -24)
+        bar.Position = UDim2.new(0, 8, 0, 8)
+        bar.BackgroundColor3 = color
+        bar.BorderSizePixel = 0
+        Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+
+        local iconBox = Instance.new("Frame", card)
+        iconBox.Size = UDim2.new(0, 32, 0, 32)
+        iconBox.Position = UDim2.new(0, 22, 0, 10)
+        iconBox.BackgroundColor3 = Colors.ChipOn
+        iconBox.BorderSizePixel = 0
+        Instance.new("UICorner", iconBox).CornerRadius = UDim.new(0, 8)
+        local ic = MakeIcon(iconBox, iconKey, 18, color)
+        ic.AnchorPoint = Vector2.new(0.5, 0.5)
+        ic.Position = UDim2.new(0.5, 0, 0.5, 0)
+
+        local t = NewLabel(card, tostring(title), 13, Enum.Font.GothamBold, Colors.Text)
+        t.Size = UDim2.new(1, -74, 0, 16)
+        t.Position = UDim2.new(0, 64, 0, 8)
+        t.TextTruncate = Enum.TextTruncate.AtEnd
+
+        local s = NewLabel(card, (tostring(text):gsub("\n", " · ")), 11, Enum.Font.Gotham, Colors.TextDim)
+        s.Size = UDim2.new(1, -74, 0, 26)
+        s.Position = UDim2.new(0, 64, 0, 25)
+        s.TextWrapped = true
+        s.TextYAlignment = Enum.TextYAlignment.Top
+        s.TextTruncate = Enum.TextTruncate.AtEnd
+
+        local track = Instance.new("Frame", card)
+        track.Size = UDim2.new(1, -32, 0, 3)
+        track.Position = UDim2.new(0, 16, 1, -7)
+        track.BackgroundColor3 = Colors.Track
+        track.BorderSizePixel = 0
+        Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+        local fill = Instance.new("Frame", track)
+        fill.Size = UDim2.new(1, 0, 1, 0)
+        fill.BackgroundColor3 = color
+        fill.BorderSizePixel = 0
+        Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+        local entry = { wrap = wrap, card = card, closed = false }
+        table.insert(activeNotifs, entry)
+        if #activeNotifs > MAX_NOTIFS then dismissNotif(activeNotifs[1]) end
+
+        TweenService:Create(card, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Position = UDim2.new(0, 0, 0, 0)
+        }):Play()
+        TweenService:Create(fill, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
+            Size = UDim2.new(0, 0, 1, 0)
+        }):Play()
+
+        card.MouseButton1Click:Connect(function() dismissNotif(entry) end)
+        task.delay(duration, function() dismissNotif(entry) end)
+    end
+
+    showNotif = function(title, text, duration)
+        local ok = pcall(buildNotif, title, text, duration)
+        if not ok then
+            pcall(function()
+                StarterGui:SetCore("SendNotification", { Title = tostring(title), Text = tostring(text), Duration = duration or 5 })
+            end)
+        end
+    end
+end
 
 -- ═══════════ [ FRAME UTAMA ] ═══════════
 local SIDEBAR_W = 150
@@ -1582,7 +1746,7 @@ do
     local Title = NewLabel(Sidebar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
     Title.Size = UDim2.new(0, 80, 0, 18)
     Title.Position = UDim2.new(0, 56, 0, 15)
-    local Ver = NewLabel(Sidebar, "Steal An Egg · v49", 10, Enum.Font.Gotham, Colors.TextDim)
+    local Ver = NewLabel(Sidebar, "Steal An Egg · v51", 10, Enum.Font.Gotham, Colors.TextDim)
     Ver.Size = UDim2.new(0, 92, 0, 14)
     Ver.Position = UDim2.new(0, 56, 0, 33)
     Ver.TextTruncate = Enum.TextTruncate.AtEnd
@@ -1880,7 +2044,7 @@ do
         end
         saveConfig()
         print("🔄 [Target] Reset. Sekarang: " .. #config.DetectedTargets .. " player.")
-        StarterGui:SetCore("SendNotification", {Title = "Target Reset", Text = #config.DetectedTargets .. " player terscan ulang.", Duration = 3})
+        showNotif("Target Reset", #config.DetectedTargets .. " player terscan ulang.", 3)
     end)
 
     -- ── Status ──
@@ -1918,7 +2082,7 @@ do
             for _, n in ipairs(initial) do table.insert(config.DetectedTargets, n) end
             print("📋 [Target] Snapshot awal: " .. #config.DetectedTargets .. " player.")
 
-            StarterGui:SetCore("SendNotification", {Title = "Monitor Egg ON", Text = "Auto Place (BigFroot, Nasi Rendang, Ajjans, Venyx) aktif.", Duration = 5})
+            showNotif("Monitor Egg ON", "Auto Place (BigFroot, Nasi Rendang, Ajjans, Venyx) aktif.", 5)
         else
             -- ⭐ MATIIN AUTO PLACE (BigFroot + Nasi Rendang + Ajjans + Venyx)
             setBigFrootAutoPlace(false)
@@ -1926,7 +2090,7 @@ do
             setAjjansAutoPlace(false)
             setVenyxAutoPlace(false)
 
-            StarterGui:SetCore("SendNotification", {Title = "Monitor Egg OFF", Text = "Monitor & Auto Place berhenti.", Duration = 3})
+            showNotif("Monitor Egg OFF", "Monitor & Auto Place berhenti.", 3)
         end
         saveConfig()
     end)
@@ -1935,14 +2099,14 @@ do
     webhookToggle = W.Switch(kBody, "Webhook Manual", "send", 2, config.WebhookEnabled, function(state)
         if is_monitoring then
             webhookToggle.SetState(false)
-            StarterGui:SetCore("SendNotification", {Title = "Webhook Terkunci", Text = "Matikan Monitor dulu kalau mau pake webhook manual.", Duration = 4})
+            showNotif("Webhook Terkunci", "Matikan Monitor dulu kalau mau pake webhook manual.", 4)
             return
         end
 
         config.WebhookEnabled = state
         saveConfig()
         if state then
-            StarterGui:SetCore("SendNotification", {Title = "Webhook Manual Aktif", Text = "Monitor akan dikirim ke Discord.", Duration = 3})
+            showNotif("Webhook Manual Aktif", "Monitor akan dikirim ke Discord.", 3)
         end
     end)
 
@@ -2000,6 +2164,7 @@ do
     StatusDisplay.Position = UDim2.new(0, 28, 0, 0)
     StatusDisplay.TextTruncate = Enum.TextTruncate.AtEnd
 
+    local lastStatusKey = nil
     local function SyncStatus()
         local raw = StatusLbl.Text
         local key, col = "egg", Colors.TextDim
@@ -2011,6 +2176,11 @@ do
         SetIconColor(StatusIcons[key], col)
         StatusDisplay.Text = raw
         StatusDisplay.TextColor3 = col
+        UI.StatusShort = raw:gsub("^Status:%s*", "")
+        if key == "hop" and lastStatusKey ~= "hop" and showNotif then
+            showNotif("Target masih ada", "Pindah server... (Hop #" .. tostring((config.HopCount or 0) + 1) .. ")", 4)
+        end
+        lastStatusKey = key
     end
     StatusLbl:GetPropertyChangedSignal("Text"):Connect(SyncStatus)
     SyncStatus()
@@ -2094,7 +2264,7 @@ ServerTab.Visible = false
 do
     local function notify(title, text, dur)
         pcall(function()
-            StarterGui:SetCore("SendNotification", {Title = title, Text = tostring(text), Duration = dur or 4})
+            showNotif(title, tostring(text), dur or 4)
         end)
     end
 
@@ -2304,11 +2474,119 @@ do
         end
     end)
 
+    -- ── Mode mini: panel kecil saat panel utama di-minimize ──
+    local Mini = Instance.new("Frame", ScreenGui)
+    Mini.Size = UDim2.new(0, 250, 0, 52)
+    Mini.AnchorPoint = Vector2.new(0.5, 0)
+    Mini.Position = UDim2.new(0.5, 0, 0, 12)
+    Mini.BackgroundColor3 = Colors.Background
+    Mini.BackgroundTransparency = 0.02
+    Mini.BorderSizePixel = 0
+    Mini.Active = true
+    Mini.Draggable = true
+    Mini.Visible = false
+    Instance.new("UICorner", Mini).CornerRadius = UDim.new(0, 14)
+    local MiniStroke = Instance.new("UIStroke", Mini)
+    MiniStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    MiniStroke.Color = Colors.Border
+    MiniStroke.Thickness = 1
+
+    -- ring kecil (teknik dua setengah lingkaran yang sama)
+    local MR, MT = 36, 4
+    local MiniRing = Instance.new("Frame", Mini)
+    MiniRing.Size = UDim2.new(0, MR, 0, MR)
+    MiniRing.Position = UDim2.new(0, 10, 0.5, -MR / 2)
+    MiniRing.BackgroundTransparency = 1
+    local MTrack = Instance.new("Frame", MiniRing)
+    MTrack.Size = UDim2.new(1, -MT * 2, 1, -MT * 2)
+    MTrack.Position = UDim2.new(0, MT, 0, MT)
+    MTrack.BackgroundTransparency = 1
+    Instance.new("UICorner", MTrack).CornerRadius = UDim.new(1, 0)
+    local MTS = Instance.new("UIStroke", MTrack)
+    MTS.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    MTS.Thickness = MT
+    MTS.Color = Colors.Track
+    local function MiniHalf(isRight)
+        local Clip = Instance.new("Frame", MiniRing)
+        Clip.Size = UDim2.new(0.5, 0, 1, 0)
+        Clip.Position = isRight and UDim2.new(0.5, 0, 0, 0) or UDim2.new(0, 0, 0, 0)
+        Clip.BackgroundTransparency = 1
+        Clip.ClipsDescendants = true
+        local Circ = Instance.new("Frame", Clip)
+        Circ.Size = UDim2.new(2, -MT * 2, 1, -MT * 2)
+        Circ.Position = isRight and UDim2.new(-1, MT, 0, MT) or UDim2.new(0, MT, 0, MT)
+        Circ.BackgroundTransparency = 1
+        Instance.new("UICorner", Circ).CornerRadius = UDim.new(1, 0)
+        local St = Instance.new("UIStroke", Circ)
+        St.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        St.Thickness = MT
+        St.Color = Colors.Accent
+        local Gr = Instance.new("UIGradient", St)
+        Gr.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0),
+            NumberSequenceKeypoint.new(0.5, 0),
+            NumberSequenceKeypoint.new(0.501, 1),
+            NumberSequenceKeypoint.new(1, 1),
+        })
+        return Gr, St
+    end
+    local MRG, MRS = MiniHalf(true)
+    local MLG, MLS = MiniHalf(false)
+    UI.MiniStrokes = { MRS, MLS }
+    UI.SetMiniRing = function(p)
+        local angle = math.clamp(p, 0, 1) * 360
+        MRG.Rotation = math.clamp(angle, 0, 180)
+        MLG.Rotation = math.clamp(angle - 180, 0, 180) - 180
+    end
+    UI.SetMiniRing(0)
+    UI.MiniPct = NewLabel(MiniRing, "—", 9, Enum.Font.GothamBold, Colors.Text, Enum.TextXAlignment.Center)
+    UI.MiniPct.Size = UDim2.new(1, 0, 1, 0)
+
+    UI.MiniTitle = NewLabel(Mini, "Idle", 12, Enum.Font.GothamBold, Colors.Text)
+    UI.MiniTitle.Size = UDim2.new(1, -100, 0, 16)
+    UI.MiniTitle.Position = UDim2.new(0, 56, 0, 9)
+    UI.MiniTitle.TextTruncate = Enum.TextTruncate.AtEnd
+    UI.MiniSub = NewLabel(Mini, "Aktifkan monitor", 10, Enum.Font.Gotham, Colors.TextDim)
+    UI.MiniSub.Size = UDim2.new(1, -100, 0, 14)
+    UI.MiniSub.Position = UDim2.new(0, 56, 0, 27)
+    UI.MiniSub.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local Expand = Instance.new("TextButton", Mini)
+    Expand.Size = UDim2.new(0, 28, 0, 28)
+    Expand.Position = UDim2.new(1, -38, 0.5, -14)
+    Expand.BackgroundColor3 = Colors.Tile
+    Expand.AutoButtonColor = false
+    Expand.Text = ""
+    Instance.new("UICorner", Expand).CornerRadius = UDim.new(0, 8)
+    local ExIc = MakeIcon(Expand, "chevron", 14, Colors.Accent)
+    ExIc.AnchorPoint = Vector2.new(0.5, 0.5)
+    ExIc.Position = UDim2.new(0.5, 0, 0.5, 0)
+    ExIc.Rotation = 180
+    Expand.MouseEnter:Connect(function() Expand.BackgroundColor3 = Colors.SwitchOff end)
+    Expand.MouseLeave:Connect(function() Expand.BackgroundColor3 = Colors.Tile end)
+    UI.Mini = Mini
+
+    local function ShowMain(show)
+        MainFrame.Visible = show
+        Mini.Visible = false
+    end
+    Expand.MouseButton1Click:Connect(function() ShowMain(true) end)
+
     FloatingBtn.MouseButton1Click:Connect(function()
         if isDragging then return end
-        MainFrame.Visible = not MainFrame.Visible
+        if MainFrame.Visible then
+            -- tutup panel utama → tampilkan mode mini
+            MainFrame.Visible = false
+            Mini.Visible = true
+        else
+            ShowMain(true)
+        end
     end)
-    UI.MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
+    -- minimize → panel utama disembunyikan, mode mini muncul
+    UI.MinBtn.MouseButton1Click:Connect(function()
+        MainFrame.Visible = false
+        Mini.Visible = true
+    end)
 end
 
 -- ═══════════ [ PENYEGAR TAMPILAN (BACA-SAJA) ] ═══════════
@@ -2648,6 +2926,26 @@ local function ApplyView(v)
     UI.EggBarFill.Size = UDim2.new(frac, 0, 1, 0)
     UI.EggBarName.Text = "Egg " .. mapTxt .. " (map terakhir)"
     UI.EggBarVal.Text = eggs .. " / " .. EGG_GOAL
+
+    -- mode mini
+    if UI.Mini and UI.Mini.Visible then
+        for _, st in ipairs(UI.MiniStrokes) do st.Color = v.color end
+        UI.SetMiniRing(v.pct)
+        UI.MiniPct.Text = idleMode and "—" or (v.ptxt or (math.floor(v.pct * 100 + 0.0001) .. "%"))
+        UI.MiniTitle.Text = idleMode and "Idle" or (v.idx >= 3 and ("Egg " .. eggs .. " / " .. EGG_GOAL) or v.caption)
+        UI.MiniSub.Text = idleMode and "Aktifkan monitor" or (v.pill .. " · Hop #" .. tostring(config.HopCount or 0) .. " · " .. UI.StSpeed.Text)
+        UI.MiniSub.TextColor3 = v.pillColor
+    end
+
+    -- notifikasi sekali saat target egg tercapai (reset kalau turun lagi)
+    if is_monitoring and eggs >= EGG_GOAL then
+        if not UI.EggGoalNotified then
+            UI.EggGoalNotified = true
+            showNotif("Target egg tercapai", eggs .. " / " .. EGG_GOAL .. " Egg " .. mapTxt, 6)
+        end
+    elseif eggs < EGG_GOAL then
+        UI.EggGoalNotified = false
+    end
 end
 
 task.spawn(function()
@@ -2774,7 +3072,7 @@ task.spawn(function()
             is_monitoring = true
             StatusLbl.Text = "Status: Monitor Egg ON (dipulihkan, " .. #config.DetectedTargets .. " target lama)"
             pcall(function()
-                StarterGui:SetCore("SendNotification", {Title = "Monitor Dipulihkan", Text = "Lanjut setelah hop. " .. #config.DetectedTargets .. " target dari server sebelumnya.", Duration = 5})
+                showNotif("Monitor Dipulihkan", "Lanjut setelah hop. " .. #config.DetectedTargets .. " target dari server sebelumnya.", 5)
             end)
         else
             if monitorToggle.Callback then monitorToggle.Callback(true) end
