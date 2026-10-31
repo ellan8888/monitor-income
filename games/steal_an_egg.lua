@@ -1,7 +1,13 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg (v42 - + kontrol Auto Place Ajjans & Venyx)
+-- 🥚 V-Ziir0 Hub: Steal An Egg (v48 - hitung egg tas + hotbar, map terakhir otomatis)
 -- v41: Auto Place All di hub Ajjans ikut nyala (< 15M) / mati (>= 15M).
 -- v42: Auto place di hub Venyx juga ikut nyala/mati (lewat objek library Venyx).
+-- v43: Venyx: kalau :Set tidak mempan → klik toggle langsung; log status di F9.
+-- v45: Egg di hotbar dibaca dari UI hotbar (BackpackGui), bukan cuma grid tas.
+-- v46: Map terakhir & daftar egg otomatis dari ReplicatedStorage.Data.Areas.Configs;
+--      egg dihitung dari Tool di Backpack + karakter (nama Tool = nama pet).
+-- v47: fungsi Ajjans/Venyx/EggData dibungkus do...end (batas 200 local Luau).
+-- v48: egg = grid tas ("<Map> Egg", UI) + hotbar (Tool "<Pet> Egg"); pet tidak dihitung.
 -- v40: setelah server hop, script otomatis jalan lagi dan MELANJUTKAN monitor
 --      beserta daftar target dari server sebelumnya (config dibaca dari file).
 -- UI sama dengan v39. Logika sniper/auto place/webhook tidak diubah.
@@ -9,6 +15,7 @@
 
 -- ⭐ TUNGGU GAME SIAP (penting saat dijalankan otomatis setelah teleport)
 if not game:IsLoaded() then game.Loaded:Wait() end
+print("🥚 V-Ziir0 Steal An Egg v48 dimuat")
 
 -- ⭐ SISTEM ANTI-DOUBLE
 if _G.StealEgg_Hub_Active then
@@ -192,6 +199,8 @@ _G.setNasiRendangAutoPlace = function(state)
     return true
 end
 
+local setAjjansAutoPlace, getAjjansAutoPlaceState, setVenyxAutoPlace, getVenyxAutoPlaceState
+do
 -- ═══════════ [ FUNGSI AJJANS ] ═══════════
 -- Cari toggle "Auto Place All" di UI Ajjans lalu hidup/matikan tanpa mouse
 -- (tetap jalan walau UI Ajjans ditutup). Hasil scan di-cache; scan ulang
@@ -323,7 +332,7 @@ local function ajjansSetup(force)
     return Ajjans.toggle ~= nil
 end
 
-local function getAjjansAutoPlaceState()
+function getAjjansAutoPlaceState()
     if not ajjansSetup(false) then return nil end
     local ok, v = pcall(ajjansReadState, Ajjans.toggle)
     if ok then return v end
@@ -331,7 +340,7 @@ local function getAjjansAutoPlaceState()
 end
 
 -- Non-blocking: aman dipanggil tiap detik dari loop monitor
-local function setAjjansAutoPlace(state)
+function setAjjansAutoPlace(state)
     if Ajjans.busy then return true end
     if not ajjansSetup(false) then
         if not Ajjans.warned then
@@ -466,6 +475,8 @@ local function venyxFindLib(force)
     if Venyx.lib and not force then return true end
     if not getgc then return false end
     if not force and (os.clock() - Venyx.lastGc) < 15 then return false end
+    -- 3x gagal & toggle UI Venyx juga tidak ada → anggap Venyx tidak dipakai, stop scan berat
+    if not force and (Venyx.gcFails or 0) >= 3 and not (Venyx.toggle and Venyx.toggle.Parent) then return false end
     Venyx.lastGc = os.clock()
     Venyx.lib, Venyx.libFn = nil, nil
     local names = { "Set", "SetValue", "SetState", "Toggle", "set", "setValue", "SetToggle" }
@@ -492,48 +503,90 @@ local function venyxFindLib(force)
             end
         end
     end
+    Venyx.gcFails = (Venyx.gcFails or 0) + 1
     return false
 end
 
-local function getVenyxAutoPlaceState()
+function getVenyxAutoPlaceState()
     return venyxReadState()
 end
 
+-- Klik toggle UI Venyx langsung (fallback kalau :Set tidak mempan)
+local function venyxClickToggle(state)
+    local t = Venyx.toggle
+    if not (t and t.Parent) then return false end
+    local tries = { t }
+    for _, d in ipairs(t:GetDescendants()) do
+        if d:IsA("GuiButton") then table.insert(tries, d) end
+    end
+    local p = t.Parent
+    for _ = 1, 3 do
+        if p and p:IsA("GuiButton") then table.insert(tries, p) end
+        p = p and p.Parent
+    end
+    for _, obj in ipairs(tries) do
+        pcall(ajjansClick, obj)
+        task.wait(0.35)
+        if venyxReadState() == state then return true end
+    end
+    return false
+end
+
+local venyxLastDiag = ""
+local function venyxDiag()
+    local d = "UI toggle: " .. ((Venyx.toggle and Venyx.toggle.Parent) and "ketemu" or "TIDAK") ..
+              " | library: " .. (Venyx.lib and ("ketemu (" .. tostring(Venyx.libFn) .. ")") or "TIDAK") ..
+              " | getgc: " .. (getgc and "ada" or "TIDAK ADA")
+    if d ~= venyxLastDiag then
+        venyxLastDiag = d
+        print("🔎 [Venyx] " .. d)
+    end
+end
+
 -- Non-blocking: aman dipanggil tiap detik dari loop monitor
-local function setVenyxAutoPlace(state)
+function setVenyxAutoPlace(state)
     if Venyx.busy then return true end
     local cur = venyxReadState()
     if cur == state then Venyx.lastSent = state; return true end
-    -- UI tidak terbaca → hanya kirim saat target berubah (hindari spam :Set)
+    -- UI tidak terbaca → hanya kirim saat target berubah (hindari spam)
     if cur == nil and Venyx.lastSent == state then return true end
-    if (os.clock() - Venyx.lastClick) < 1.5 then return true end
-    if not Venyx.lib and (os.clock() - Venyx.lastGc) < 15 then
-        return false   -- getgc baru saja gagal, tunggu jeda dulu
-    end
+    if (os.clock() - Venyx.lastClick) < 2 then return true end
     Venyx.busy = true
     Venyx.lastClick = os.clock()
     task.spawn(function()
         pcall(function()
-            if not venyxFindLib(false) then
+            -- 1) lewat objek library Venyx
+            if venyxFindLib(false) then
+                pcall(function() Venyx.lib[Venyx.libFn](Venyx.lib, state) end)
+                task.wait(0.35)
+            end
+            local after = venyxReadState()
+            -- 2) UI terbaca tapi belum berubah → klik toggle langsung
+            if after ~= nil and after ~= state then
+                if venyxClickToggle(state) then
+                    after = state
+                    print("🖱️ [Venyx] Auto place diubah lewat klik toggle")
+                elseif (os.clock() - (Venyx.lastForceGc or 0)) > 30 then
+                    -- 3) objek library mungkin basi (UI di-reload) → cari ulang, maks 1x/30 dtk
+                    Venyx.lastForceGc = os.clock()
+                    if venyxFindLib(true) then
+                        pcall(function() Venyx.lib[Venyx.libFn](Venyx.lib, state) end)
+                        task.wait(0.35)
+                        after = venyxReadState()
+                    end
+                end
+            end
+            venyxDiag()
+            if after == nil and not Venyx.lib then
                 if not Venyx.warned then
                     Venyx.warned = true
                     warn("[Venyx] Toggle 'Auto place' belum ketemu (abaikan kalau tidak pakai Venyx; kalau pakai, buka UI Venyx di tab Farm > Pen sekali).")
                 end
                 return
             end
-            pcall(function() Venyx.lib[Venyx.libFn](Venyx.lib, state) end)
-            task.wait(0.35)
-            local after = venyxReadState()
-            if after ~= nil and after ~= state then
-                -- objek lama mungkin sudah tidak valid (UI di-reload), cari ulang
-                if venyxFindLib(true) then
-                    pcall(function() Venyx.lib[Venyx.libFn](Venyx.lib, state) end)
-                    task.wait(0.35)
-                    after = venyxReadState()
-                end
-            end
             Venyx.lastSent = state
             local shown = (after == nil) and (state and "ON (terkirim)" or "OFF (terkirim)") or (after and "ON" or "OFF")
+            if after ~= nil and after ~= state then shown = shown .. " ⚠️ GAGAL diubah" end
             print("🔄 [Venyx] Auto place -> " .. shown)
         end)
         Venyx.busy = false
@@ -541,6 +594,8 @@ local function setVenyxAutoPlace(state)
     return true
 end
 _G.setVenyxAutoPlace = setVenyxAutoPlace
+
+end
 
 -- ═══════════ [ FUNGSI SCAN PLAYER ] ═══════════
 local function scanCurrentPlayers()
@@ -649,7 +704,287 @@ local function getMyData()
     return money, speed, speedNum
 end
 
+local EggData, loadEggData, forEachEggTool, forEachGridEgg, getHotbarSlots
+do
+-- ═══════════ [ DATA EGG OTOMATIS (dari config game) ] ═══════════
+-- Sumber: ReplicatedStorage.Data.Areas.Configs (1 ModuleScript per map).
+-- • Map terakhir = map dengan ProgressionOrder tertinggi yang ada di dunia
+--   (Workspace.World.Areas.GuardAreas). Ada map baru dari update → otomatis pindah.
+-- • Daftar egg map = DropTable map itu. ID di DropTable (mis. "Cosmic Fox")
+--   diterjemahkan ke nama tampilan (mis. "Starry Fox") lewat ModuleScript
+--   bernama sama di ReplicatedStorage.Data.
+-- • Egg dihitung dari Tool di Backpack + karakter (nama Tool = nama pet).
+-- Config dibaca ulang tiap 60 dtk. Kalau gagal → pakai cara lama (UI tas).
+local RS_Egg = game:GetService("ReplicatedStorage")
+EggData = { ok = false, lastLoad = -1000, areas = {}, byId = {}, lastArea = nil,
+                  matchers = {}, diagDone = false }
+
+local function eggNorm(str)
+    str = string.lower(tostring(str or ""))
+    str = str:gsub("%s*%[.-%]%s*$", "")      -- buang "[X1]"
+    str = str:gsub("%s+egg$", "")            -- buang akhiran " egg"
+    str = str:gsub("^%s+", ""):gsub("%s+$", "")
+    return str
+end
+
+local displayCache = {}
+local moduleIndex = nil
+local function resolveDisplayName(id)
+    if displayCache[id] ~= nil then return displayCache[id] or nil end
+    if not moduleIndex then
+        moduleIndex = {}
+        local data = RS_Egg:FindFirstChild("Data")
+        local areasFolder = data and data:FindFirstChild("Areas")
+        if data then
+            for _, m in ipairs(data:GetDescendants()) do
+                if m:IsA("ModuleScript") and not (areasFolder and m:IsDescendantOf(areasFolder)) then
+                    moduleIndex[m.Name] = moduleIndex[m.Name] or {}
+                    table.insert(moduleIndex[m.Name], m)
+                end
+            end
+        end
+    end
+    local found = false
+    for _, m in ipairs(moduleIndex[id] or {}) do
+        local ok, t = pcall(require, m)
+        if ok and type(t) == "table" then
+            local dn = rawget(t, "DisplayName") or rawget(t, "Name")
+            if type(dn) == "string" and dn ~= "" then found = dn; break end
+        end
+    end
+    displayCache[id] = found
+    return found or nil
+end
+
+function loadEggData(force)
+    if not force and (os.clock() - EggData.lastLoad) < 60 then return EggData.ok end
+    EggData.lastLoad = os.clock()
+    local ok = pcall(function()
+        local configs = RS_Egg:WaitForChild("Data", 5)
+        configs = configs and configs:FindFirstChild("Areas")
+        configs = configs and configs:FindFirstChild("Configs")
+        if not configs then error("Areas.Configs tidak ada") end
+
+        local areas, byId = {}, {}
+        for _, mod in ipairs(configs:GetChildren()) do
+            if mod:IsA("ModuleScript") then
+                local okR, cfg = pcall(require, mod)
+                if okR and type(cfg) == "table" and type(cfg.DropTable) == "table" then
+                    local area = {
+                        id = tostring(cfg._id or mod.Name),
+                        name = tostring(cfg.DisplayName or cfg._id or mod.Name),
+                        guardId = tostring(cfg.GuardId or cfg._id or mod.Name),
+                        order = tonumber(cfg.ProgressionOrder) or -1,
+                        pets = {},
+                    }
+                    for _, entry in ipairs(cfg.DropTable) do
+                        local pid = type(entry) == "table" and entry[1] or nil
+                        if type(pid) == "string" then
+                            local dn = resolveDisplayName(pid) or pid
+                            table.insert(area.pets, { id = pid, name = dn })
+                        end
+                    end
+                    table.insert(areas, area)
+                    byId[area.id] = area
+                end
+            end
+        end
+        if #areas == 0 then error("tidak ada config map") end
+
+        -- map terakhir: ProgressionOrder tertinggi yang ada di dunia
+        local guard = Workspace:FindFirstChild("World")
+        guard = guard and guard:FindFirstChild("Areas")
+        guard = guard and guard:FindFirstChild("GuardAreas")
+        local best
+        for _, a in ipairs(areas) do
+            local inWorld = guard == nil or guard:FindFirstChild(a.guardId) or guard:FindFirstChild(a.id) or guard:FindFirstChild(a.name)
+            if inWorld and (not best or a.order > best.order) then best = a end
+        end
+        if not best then
+            for _, a in ipairs(areas) do if not best or a.order > best.order then best = a end end
+        end
+
+        -- pencocok nama Tool → map (nama terpanjang dicek dulu)
+        local matchers = {}
+        for _, a in ipairs(areas) do
+            for _, pet in ipairs(a.pets) do
+                table.insert(matchers, { key = eggNorm(pet.name), area = a, label = pet.name })
+                if eggNorm(pet.id) ~= eggNorm(pet.name) then
+                    table.insert(matchers, { key = eggNorm(pet.id), area = a, label = pet.name })
+                end
+            end
+        end
+        table.sort(matchers, function(x, y) return #x.key > #y.key end)
+
+        local changed = EggData.lastArea and best and EggData.lastArea.id ~= best.id
+        EggData.areas, EggData.byId, EggData.lastArea, EggData.matchers = areas, byId, best, matchers
+        if changed then print("🆕 [EggData] Map terakhir berubah → " .. best.name) end
+    end)
+    EggData.ok = ok and EggData.lastArea ~= nil
+    if EggData.ok and not EggData.diagDone then
+        EggData.diagDone = true
+        local names = {}
+        for _, pet in ipairs(EggData.lastArea.pets) do
+            table.insert(names, pet.name ~= pet.id and (pet.name .. " (" .. pet.id .. ")") or pet.name)
+        end
+        print("🥚 [EggData] Map terakhir: " .. EggData.lastArea.name .. " (order " .. EggData.lastArea.order .. ")")
+        print("🥚 [EggData] Egg map ini: " .. table.concat(names, ", "))
+    elseif not EggData.ok and not EggData.diagDone then
+        EggData.diagDone = true
+        warn("[EggData] Config map tidak terbaca → pakai deteksi lama (UI tas).")
+    end
+    return EggData.ok
+end
+
+-- map asal sebuah Tool egg (nil kalau bukan egg yang dikenal)
+local function eggToolInfo(tool)
+    local n = eggNorm(tool.Name)
+    for _, m in ipairs(EggData.matchers) do
+        if n == m.key or (#n > #m.key and n:sub(-(#m.key + 1)) == " " .. m.key) then
+            return m.area, m.label
+        end
+    end
+    -- cek atribut (beberapa game simpan ID pet di atribut)
+    local okA, attrs = pcall(function() return tool:GetAttributes() end)
+    if okA and attrs then
+        for _, v in pairs(attrs) do
+            if type(v) == "string" then
+                local key = eggNorm(v)
+                for _, m in ipairs(EggData.matchers) do
+                    if key == m.key then return m.area, m.label end
+                end
+            end
+        end
+    end
+    -- nama gaya lama: "<Map> Egg"
+    local lower = string.lower(tool.Name)
+    if lower:find("egg") then
+        for _, a in ipairs(EggData.areas) do
+            if lower:find(string.lower(a.name), 1, true) then return a, a.name end
+        end
+    end
+    return nil
+end
+
+local function eggToolMult(tool)
+    local m = string.match(tool.Name, "%[[xX](%d+)%]")
+    return tonumber(m) or 1
+end
+
+-- egg di grid tas ("All Items" → Eggs): hanya ada di UI, bukan Tool.
+-- fn(namaItem, jumlah) untuk tiap slot yang namanya mengandung "egg".
+function forEachGridEgg(fn)
+    local pg = player:FindFirstChild("PlayerGui")
+    local inv = pg and pg:FindFirstChild("BackpackGui")
+    if inv then pcall(function() inv.Enabled = true end) end
+    for _, k in ipairs({ "Backpack", "Main", "Inventory", "ScrollingFrame" }) do
+        inv = inv and inv:FindFirstChild(k)
+    end
+    if not inv then return false end
+    for _, slot in ipairs(inv:GetChildren()) do
+        if slot:IsA("Frame") or slot:IsA("ImageLabel") or slot:IsA("TextButton") then
+            local lbl = slot:FindFirstChild("ToolName") or slot:FindFirstChild("Name")
+            local itemName
+            if lbl and lbl:IsA("TextLabel") then itemName = lbl.Text
+            else
+                for _, d in ipairs(slot:GetDescendants()) do
+                    if d:IsA("TextLabel") and d.Text ~= "" then itemName = d.Text; break end
+                end
+            end
+            if itemName and itemName:lower():find("egg") then
+                local mult = 1
+                for _, d in ipairs(slot:GetDescendants()) do
+                    if d:IsA("TextLabel") then
+                        local m = string.match(d.Text, "[xX](%d+)")
+                        if m then mult = tonumber(m) or 1 end
+                    end
+                end
+                fn(itemName, mult)
+            end
+        end
+    end
+    return true
+end
+
+-- egg di hotbar / yang dipegang: Tool bernama "<Pet> Egg" (Backpack + karakter)
+function forEachEggTool(fn)
+    local containers = { player:FindFirstChild("Backpack"), player.Character }
+    for _, c in ipairs(containers) do
+        if c then
+            for _, obj in ipairs(c:GetChildren()) do
+                if obj:IsA("Tool") then
+                    -- hanya EGG (nama berakhiran "Egg"), bukan pet ("Astral Jackalope")
+                    local raw = string.lower(obj.Name):gsub("%s*%[.-%]%s*$", ""):gsub("%s+$", "")
+                    if raw:sub(-3) == "egg" then
+                        local area, label = eggToolInfo(obj)
+                        if area then fn(obj, area, label .. " Egg", eggToolMult(obj)) end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- ═══════════ [ SLOT HOTBAR (UI) ] ═══════════
+-- Ambil slot hotbar dari BackpackGui: semua label "ToolName" berisi teks
+-- yang BUKAN bagian grid "Semua Barang" (Backpack.Main.Inventory).
+local hotbarDiagDone = false
+function getHotbarSlots()
+    local slots, seen = {}, {}
+    local pg = player:FindFirstChild("PlayerGui")
+    local bg = pg and pg:FindFirstChild("BackpackGui")
+    if not bg then return slots end
+    local inv = bg:FindFirstChild("Backpack")
+    inv = inv and inv:FindFirstChild("Main")
+    inv = inv and inv:FindFirstChild("Inventory")
+    for _, d in ipairs(bg:GetDescendants()) do
+        if d:IsA("TextLabel") and (d.Name == "ToolName" or d.Name == "Name") and d.Text ~= "" then
+            if not (inv and d:IsDescendantOf(inv)) then
+                local slot = d.Parent
+                if slot and not seen[slot] then
+                    seen[slot] = true
+                    table.insert(slots, slot)
+                end
+            end
+        end
+    end
+    if not hotbarDiagDone then
+        hotbarDiagDone = true
+        print("🔎 [Hotbar] " .. #slots .. " slot terisi:")
+        for _, sl in ipairs(slots) do
+            local lbl = sl:FindFirstChild("ToolName") or sl:FindFirstChild("Name")
+            print("   • " .. sl:GetFullName() .. " = " .. tostring(lbl and lbl.Text))
+        end
+        local bp = player:FindFirstChild("Backpack")
+        if bp then
+            local names = {}
+            for _, o in ipairs(bp:GetChildren()) do table.insert(names, o.ClassName .. ":" .. o.Name) end
+            print("🔎 [Backpack folder] " .. (#names > 0 and table.concat(names, ", ") or "(kosong)"))
+        end
+    end
+    return slots
+end
+
+end
+
 local function getFarthestMapAndEgg()
+    -- ⭐ Cara baru: map terakhir + daftar egg dari config game
+    if loadEggData(false) then
+        local target = EggData.lastArea
+        local mapLower = string.lower(target.name)
+        local total = 0
+        -- grid tas: "Enchanted Forest Egg"
+        forEachGridEgg(function(name, mult)
+            if string.lower(name):find(mapLower, 1, true) then total = total + mult end
+        end)
+        -- hotbar / dipegang: "Prism Gecko Egg" (pet dari map terakhir)
+        forEachEggTool(function(_, area, _, mult)
+            if area == target then total = total + mult end
+        end)
+        return target.name, total
+    end
+
+    -- Cara lama (fallback): map terjauh dari jarak + baca UI tas
     local char = player.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return "Unknown", 0 end
     local hrp = char.HumanoidRootPart
@@ -709,9 +1044,24 @@ local function getFarthestMapAndEgg()
         end
     end
 
-    for _, obj in ipairs(char:GetChildren()) do
-        if obj:IsA("Tool") and obj.Name:lower():find("egg") and obj.Name:lower():find(farthestMapName:lower()) then
-            totalEggFisik = totalEggFisik + 1
+    -- Hotbar (bar bawah) dibaca dari UI. Slot hotbar juga menampilkan item
+    -- yang sedang dipegang, jadi kalau UI hotbar terbaca, Tool di karakter
+    -- tidak dihitung lagi (anti dobel).
+    local hotbarSlots = getHotbarSlots()
+    for _, slot in ipairs(hotbarSlots) do checkSlot(slot) end
+    if #hotbarSlots == 0 then
+        for _, obj in ipairs(char:GetChildren()) do
+            if obj:IsA("Tool") and obj.Name:lower():find("egg") and obj.Name:lower():find(farthestMapName:lower()) then
+                totalEggFisik = totalEggFisik + 1
+            end
+        end
+        local bpFolder = player:FindFirstChild("Backpack")
+        if bpFolder then
+            for _, obj in ipairs(bpFolder:GetChildren()) do
+                if obj:IsA("Tool") and obj.Name:lower():find("egg") and obj.Name:lower():find(farthestMapName:lower()) then
+                    totalEggFisik = totalEggFisik + 1
+                end
+            end
         end
     end
 
@@ -1855,6 +2205,37 @@ end
 
 -- ── Pemindai isi backpack (hanya saat tab Egg dibuka) ───
 local function ScanEggInventory()
+    -- ⭐ Cara baru: semua Tool egg yang dikenal dari config map
+    if loadEggData(false) then
+        local counts, order, isLast = {}, {}, {}
+        local mapLower = string.lower(EggData.lastArea.name)
+        local function addItem(key, mult, last)
+            key = (key:gsub("%s*[xX]%d+%s*$", ""):gsub("^%s+", ""):gsub("%s+$", ""))
+            if key == "" then return end
+            if not counts[key] then counts[key] = 0; table.insert(order, key) end
+            counts[key] = counts[key] + mult
+            isLast[key] = isLast[key] or last
+        end
+        forEachGridEgg(function(name, mult)
+            addItem(name, mult, string.lower(name):find(mapLower, 1, true) ~= nil)
+        end)
+        forEachEggTool(function(_, area, label, mult)
+            addItem(label .. " (hotbar, " .. area.name .. ")", mult, area == EggData.lastArea)
+        end)
+        local list, total = {}, 0
+        for _, nm in ipairs(order) do
+            table.insert(list, { name = nm, count = counts[nm], map = isLast[nm] })
+            total = total + counts[nm]
+        end
+        table.sort(list, function(a, b)
+            if a.map ~= b.map then return a.map end
+            if a.count ~= b.count then return a.count > b.count end
+            return a.name < b.name
+        end)
+        return list, total
+    end
+
+    -- Cara lama (fallback)
     local counts, order = {}, {}
     local function add(name, n)
         name = tostring(name or "")
@@ -1871,9 +2252,7 @@ local function ScanEggInventory()
     for _, k in ipairs({ "Backpack", "Main", "Inventory", "ScrollingFrame" }) do
         inv = inv and inv:FindFirstChild(k)
     end
-    if inv then
-        for _, slot in ipairs(inv:GetChildren()) do
-            if slot:IsA("Frame") or slot:IsA("ImageLabel") or slot:IsA("TextButton") then
+    local function readSlot(slot)
                 local lbl = slot:FindFirstChild("ToolName") or slot:FindFirstChild("Name")
                 local itemName = nil
                 if lbl and lbl:IsA("TextLabel") then itemName = lbl.Text
@@ -1893,17 +2272,25 @@ local function ScanEggInventory()
                     add(itemName, mult)
                     gotGui = true
                 end
+    end
+    if inv then
+        for _, slot in ipairs(inv:GetChildren()) do
+            if slot:IsA("Frame") or slot:IsA("ImageLabel") or slot:IsA("TextButton") then
+                readSlot(slot)
             end
         end
     end
 
-    local char = player.Character
-    if char then
-        for _, obj in ipairs(char:GetChildren()) do
-            if obj:IsA("Tool") and obj.Name:lower():find("egg") then add(obj.Name, 1) end
+    -- Hotbar (bar bawah) dari UI; kalau terbaca, sudah termasuk item yang dipegang
+    local hotbarSlots = getHotbarSlots()
+    for _, slot in ipairs(hotbarSlots) do readSlot(slot) end
+    if #hotbarSlots == 0 then
+        local char = player.Character
+        if char then
+            for _, obj in ipairs(char:GetChildren()) do
+                if obj:IsA("Tool") and obj.Name:lower():find("egg") then add(obj.Name, 1) end
+            end
         end
-    end
-    if not gotGui then
         local bp = player:FindFirstChild("Backpack")
         if bp then
             for _, obj in ipairs(bp:GetChildren()) do
