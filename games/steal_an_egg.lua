@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg (v48 - hitung egg tas + hotbar, map terakhir otomatis)
+-- 🥚 V-Ziir0 Hub: Steal An Egg (v49 - UI sidebar + kartu ala Break & Steal)
 -- v41: Auto Place All di hub Ajjans ikut nyala (< 15M) / mati (>= 15M).
 -- v42: Auto place di hub Venyx juga ikut nyala/mati (lewat objek library Venyx).
 -- v43: Venyx: kalau :Set tidak mempan → klik toggle langsung; log status di F9.
@@ -7,6 +7,7 @@
 -- v46: Map terakhir & daftar egg otomatis dari ReplicatedStorage.Data.Areas.Configs;
 --      egg dihitung dari Tool di Backpack + karakter (nama Tool = nama pet).
 -- v47: fungsi Ajjans/Venyx/EggData dibungkus do...end (batas 200 local Luau).
+-- v49: UI baru: sidebar (Monitor/Egg/Server), header, kartu 2 kolom, footer status.
 -- v48: egg = grid tas ("<Map> Egg", UI) + hotbar (Tool "<Pet> Egg"); pet tidak dihitung.
 -- v40: setelah server hop, script otomatis jalan lagi dan MELANJUTKAN monitor
 --      beserta daftar target dari server sebelumnya (config dibaca dari file).
@@ -15,7 +16,7 @@
 
 -- ⭐ TUNGGU GAME SIAP (penting saat dijalankan otomatis setelah teleport)
 if not game:IsLoaded() then game.Loaded:Wait() end
-print("🥚 V-Ziir0 Steal An Egg v48 dimuat")
+print("🥚 V-Ziir0 Steal An Egg v49 dimuat")
 
 -- ⭐ SISTEM ANTI-DOUBLE
 if _G.StealEgg_Hub_Active then
@@ -1128,171 +1129,182 @@ local function hopServer()
 end
 
 -- ═══════════════════════════════════════════════════════
--- ⭐ UI CUSTOM (V39 - PHASE RING + EGG BACKPACK)
+-- ⭐ UI CUSTOM (v49 - layout sidebar + kartu, gaya Break & Steal, tema teal)
 -- Bagian ini murni tampilan. Variabel logika hanya DIBACA oleh UI,
 -- kecuali handler klik yang isinya sama persis dengan versi sebelumnya.
+-- Banyak blok dibungkus do...end supaya tidak melewati batas 200 local Luau.
 -- ═══════════════════════════════════════════════════════
 local Colors = {
-    Background = Color3.fromRGB(15, 26, 34),
-    GlassPanel = Color3.fromRGB(22, 38, 47),
-    Border = Color3.fromRGB(39, 65, 80),
-    Accent = Color3.fromRGB(25, 195, 217),
-    Text = Color3.fromRGB(234, 246, 251),
-    TextDim = Color3.fromRGB(111, 149, 168),
-    SwitchOff = Color3.fromRGB(45, 70, 84),
-    Green = Color3.fromRGB(79, 227, 168),
-    Amber = Color3.fromRGB(245, 194, 107),
-    Danger = Color3.fromRGB(229, 72, 77),
-    Track = Color3.fromRGB(29, 51, 64),
-    OnAccent = Color3.fromRGB(6, 40, 48),
-    ChipOn = Color3.fromRGB(18, 48, 58),
-    AmberBg = Color3.fromRGB(43, 36, 23),
+    Background = Color3.fromRGB(12, 17, 20),
+    Sidebar    = Color3.fromRGB(16, 22, 26),
+    GlassPanel = Color3.fromRGB(19, 27, 32),   -- latar kartu
+    Tile       = Color3.fromRGB(26, 36, 42),   -- latar tile / tombol kecil
+    Border     = Color3.fromRGB(36, 49, 57),
+    Accent     = Color3.fromRGB(25, 195, 217), -- ganti di sini kalau mau warna lain
+    Text       = Color3.fromRGB(234, 246, 251),
+    TextDim    = Color3.fromRGB(122, 147, 160),
+    SwitchOff  = Color3.fromRGB(46, 61, 70),
+    Green      = Color3.fromRGB(79, 227, 168),
+    Amber      = Color3.fromRGB(245, 194, 107),
+    Danger     = Color3.fromRGB(229, 72, 77),
+    Track      = Color3.fromRGB(32, 44, 51),
+    OnAccent   = Color3.fromRGB(6, 40, 48),
+    ChipOn     = Color3.fromRGB(16, 44, 52),
+    AmberBg    = Color3.fromRGB(43, 36, 23),
 }
 
 local EGG_GOAL = 100 -- target egg di tampilan (hanya UI, script tidak berhenti di angka ini)
+local UI = {}   -- referensi elemen UI yang diperbarui dari luar
+local W = {}    -- pabrik widget
 
 -- ⭐ IKON: digambar langsung dari bentuk (Frame), tidak butuh asset ID.
--- Opsional: isi "rbxassetid://ID" untuk mengganti ikon tertentu dengan gambar.
-local Icons = {
-    egg = "", monitor = "", target = "", close = "", minus = "", check = "", checkc = "",
-    hourglass = "", bolt = "", user = "", hop = "", send = "", scan = "", backpack = "", refresh = "",
-}
-local IconPaint = setmetatable({}, { __mode = "k" })
+-- Opsional: isi "rbxassetid://ID" di tabel Icons untuk mengganti ikon dengan gambar.
+local MakeIcon, SetIconColor
+do
+    local Icons = {
+        egg = "", monitor = "", target = "", close = "", minus = "", check = "", checkc = "",
+        hourglass = "", bolt = "", user = "", hop = "", send = "", scan = "", backpack = "", refresh = "",
+        server = "", copy = "", login = "", chevron = "", lock = "", clock = "",
+    }
+    local IconPaint = setmetatable({}, { __mode = "k" })
 
-local IconDefs = {
-    close = function(H) H.line(3.2, 3.2, 12.8, 12.8, 1.8); H.line(12.8, 3.2, 3.2, 12.8, 1.8) end,
-    minus = function(H) H.line(3, 8, 13, 8, 1.8) end,
-    check = function(H) H.line(3, 8.5, 6.5, 12, 1.9); H.line(6.5, 12, 13, 4.5, 1.9) end,
-    monitor = function(H) H.rect(2, 9, 3, 5, 0.15); H.rect(6.5, 5, 3, 9, 0.15); H.rect(11, 2, 3, 12, 0.15) end,
-    target = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.ring(4.5, 4.5, 7, 7, 1.5); H.dot(8, 8, 2.2) end,
-    hourglass = function(H)
-        H.line(4, 2.5, 12, 2.5, 1.6); H.line(4, 13.5, 12, 13.5, 1.6)
-        H.line(4.8, 3.4, 11.2, 12.6, 1.5); H.line(11.2, 3.4, 4.8, 12.6, 1.5)
-    end,
-    bolt = function(H) H.line(9.8, 1.5, 4.5, 8.8, 1.8); H.line(4.5, 8.8, 11.5, 8.8, 1.8); H.line(11.5, 8.8, 6.2, 14.5, 1.8) end,
-    checkc = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.line(5, 8.2, 7.1, 10.3, 1.5); H.line(7.1, 10.3, 11, 5.8, 1.5) end,
-    egg = function(H) H.ring(3, 1.5, 10, 13.5, 1.6, 0.5); H.dot(6.3, 6.2, 1.8) end,
-    user = function(H) H.dot(8, 5, 5); H.rect(3.5, 10.5, 9, 4.5, 0.5) end,
-    hop = function(H)
-        H.line(2.5, 5, 13, 5, 1.6); H.line(10.2, 2.4, 13, 5, 1.6); H.line(10.2, 7.6, 13, 5, 1.6)
-        H.line(13.5, 11, 3, 11, 1.6); H.line(5.8, 8.4, 3, 11, 1.6); H.line(5.8, 13.6, 3, 11, 1.6)
-    end,
-    send = function(H)
-        H.line(2, 8, 14, 2, 1.6); H.line(14, 2, 10, 14, 1.6); H.line(10, 14, 7.5, 9.5, 1.6)
-        H.line(7.5, 9.5, 2, 8, 1.6); H.line(14, 2, 7.5, 9.5, 1.6)
-    end,
-    scan = function(H) H.ring(2, 2, 9.5, 9.5, 1.6); H.line(10, 10, 14, 14, 1.9) end,
-    backpack = function(H)
-        H.ring(5, 1.2, 6, 6, 1.4, 0.5)
-        H.ring(3, 5, 10, 10.5, 1.6, 0.22)
-        H.line(5.6, 10.5, 10.4, 10.5, 1.5)
-    end,
-    refresh = function(H)
-        local px, py
-        for a = 20, 300, 35 do
-            local x = 8 + 5 * math.cos(math.rad(a))
-            local y = 8 + 5 * math.sin(math.rad(a))
-            if px then H.line(px, py, x, y, 1.6) end
-            px, py = x, y
+    local IconDefs = {
+        close = function(H) H.line(3.2, 3.2, 12.8, 12.8, 1.8); H.line(12.8, 3.2, 3.2, 12.8, 1.8) end,
+        minus = function(H) H.line(3, 8, 13, 8, 1.8) end,
+        check = function(H) H.line(3, 8.5, 6.5, 12, 1.9); H.line(6.5, 12, 13, 4.5, 1.9) end,
+        monitor = function(H) H.rect(2, 9, 3, 5, 0.15); H.rect(6.5, 5, 3, 9, 0.15); H.rect(11, 2, 3, 12, 0.15) end,
+        target = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.ring(4.5, 4.5, 7, 7, 1.5); H.dot(8, 8, 2.2) end,
+        hourglass = function(H)
+            H.line(4, 2.5, 12, 2.5, 1.6); H.line(4, 13.5, 12, 13.5, 1.6)
+            H.line(4.8, 3.4, 11.2, 12.6, 1.5); H.line(11.2, 3.4, 4.8, 12.6, 1.5)
+        end,
+        bolt = function(H) H.line(9.8, 1.5, 4.5, 8.8, 1.8); H.line(4.5, 8.8, 11.5, 8.8, 1.8); H.line(11.5, 8.8, 6.2, 14.5, 1.8) end,
+        checkc = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.line(5, 8.2, 7.1, 10.3, 1.5); H.line(7.1, 10.3, 11, 5.8, 1.5) end,
+        egg = function(H) H.ring(3, 1.5, 10, 13.5, 1.6, 0.5); H.dot(6.3, 6.2, 1.8) end,
+        user = function(H) H.dot(8, 5, 5); H.rect(3.5, 10.5, 9, 4.5, 0.5) end,
+        hop = function(H)
+            H.line(2.5, 5, 13, 5, 1.6); H.line(10.2, 2.4, 13, 5, 1.6); H.line(10.2, 7.6, 13, 5, 1.6)
+            H.line(13.5, 11, 3, 11, 1.6); H.line(5.8, 8.4, 3, 11, 1.6); H.line(5.8, 13.6, 3, 11, 1.6)
+        end,
+        send = function(H)
+            H.line(2, 8, 14, 2, 1.6); H.line(14, 2, 10, 14, 1.6); H.line(10, 14, 7.5, 9.5, 1.6)
+            H.line(7.5, 9.5, 2, 8, 1.6); H.line(14, 2, 7.5, 9.5, 1.6)
+        end,
+        scan = function(H) H.ring(2, 2, 9.5, 9.5, 1.6); H.line(10, 10, 14, 14, 1.9) end,
+        backpack = function(H)
+            H.ring(5, 1.2, 6, 6, 1.4, 0.5)
+            H.ring(3, 5, 10, 10.5, 1.6, 0.22)
+            H.line(5.6, 10.5, 10.4, 10.5, 1.5)
+        end,
+        refresh = function(H)
+            local px, py
+            for a = 20, 300, 35 do
+                local x = 8 + 5 * math.cos(math.rad(a))
+                local y = 8 + 5 * math.sin(math.rad(a))
+                if px then H.line(px, py, x, y, 1.6) end
+                px, py = x, y
+            end
+            H.line(px, py, px + 3, py + 0.3, 1.6)
+            H.line(px, py, px + 0.2, py - 3, 1.6)
+        end,
+        server = function(H)
+            H.ring(2, 2.5, 12, 4.5, 1.4, 0.25); H.ring(2, 9, 12, 4.5, 1.4, 0.25)
+            H.dot(5, 4.75, 1.6); H.dot(5, 11.25, 1.6)
+        end,
+        copy = function(H)
+            H.ring(5.5, 5.5, 8.5, 8.5, 1.5, 0.15)
+            H.line(2.5, 10.5, 2.5, 2.5, 1.5); H.line(2.5, 2.5, 10.5, 2.5, 1.5)
+        end,
+        login = function(H)
+            H.line(2, 8, 10, 8, 1.8); H.line(10, 8, 6.5, 4.5, 1.8); H.line(10, 8, 6.5, 11.5, 1.8)
+            H.line(13, 2.5, 13, 13.5, 1.8)
+        end,
+        chevron = function(H) H.line(4, 6, 8, 10, 1.6); H.line(8, 10, 12, 6, 1.6) end,
+        lock = function(H) H.rect(3, 7.5, 10, 6.5, 0.2); H.ring(4.8, 1.8, 6.4, 7.4, 1.5) end,
+        clock = function(H) H.ring(1.5, 1.5, 13, 13, 1.5); H.line(8, 4.4, 8, 8, 1.5); H.line(8, 8, 10.8, 9.6, 1.5) end,
+    }
+
+    MakeIcon = function(parent, key, size, color)
+        if Icons[key] and Icons[key] ~= "" then
+            local img = Instance.new("ImageLabel")
+            img.Image = Icons[key]
+            img.ImageColor3 = color
+            img.BackgroundTransparency = 1
+            img.Size = UDim2.new(0, size, 0, size)
+            img.Parent = parent
+            return img
         end
-        H.line(px, py, px + 3, py + 0.3, 1.6)
-        H.line(px, py, px + 0.2, py - 3, 1.6)
-    end,
 
-    server = function(H)
-        H.ring(2, 2.5, 12, 4.5, 1.4, 0.25); H.ring(2, 9, 12, 4.5, 1.4, 0.25)
-        H.dot(5, 4.75, 1.6); H.dot(5, 11.25, 1.6)
-    end,
-    copy = function(H)
-        H.ring(5.5, 5.5, 8.5, 8.5, 1.5, 0.15)
-        H.line(2.5, 10.5, 2.5, 2.5, 1.5); H.line(2.5, 2.5, 10.5, 2.5, 1.5)
-    end,
-    login = function(H)
-        H.line(2, 8, 10, 8, 1.8); H.line(10, 8, 6.5, 4.5, 1.8); H.line(10, 8, 6.5, 11.5, 1.8)
-        H.line(13, 2.5, 13, 13.5, 1.8)
-    end,
-}
+        local root = Instance.new("Frame")
+        root.BackgroundTransparency = 1
+        root.BorderSizePixel = 0
+        root.Size = UDim2.new(0, size, 0, size)
+        local s = size / 16
+        local painters = {}
 
-local function MakeIcon(parent, key, size, color)
-    if Icons[key] and Icons[key] ~= "" then
-        local img = Instance.new("ImageLabel")
-        img.Image = Icons[key]
-        img.ImageColor3 = color
-        img.BackgroundTransparency = 1
-        img.Size = UDim2.new(0, size, 0, size)
-        img.Parent = parent
-        return img
+        local function fill(f)
+            f.BorderSizePixel = 0
+            f.BackgroundColor3 = color
+            f.Parent = root
+            table.insert(painters, function(c) f.BackgroundColor3 = c end)
+        end
+
+        local H = {}
+        function H.line(x1, y1, x2, y2, th)
+            local dx, dy = x2 - x1, y2 - y1
+            local len = math.sqrt(dx * dx + dy * dy)
+            local f = Instance.new("Frame")
+            f.AnchorPoint = Vector2.new(0.5, 0.5)
+            f.Position = UDim2.new(0, (x1 + x2) / 2 * s, 0, (y1 + y2) / 2 * s)
+            f.Size = UDim2.new(0, (len + th) * s, 0, th * s)
+            f.Rotation = math.deg(math.atan2(dy, dx))
+            Instance.new("UICorner", f).CornerRadius = UDim.new(0.5, 0)
+            fill(f)
+        end
+        function H.rect(x, y, w, h, rnd)
+            local f = Instance.new("Frame")
+            f.Position = UDim2.new(0, x * s, 0, y * s)
+            f.Size = UDim2.new(0, w * s, 0, h * s)
+            Instance.new("UICorner", f).CornerRadius = UDim.new(rnd or 0, 0)
+            fill(f)
+        end
+        function H.dot(cx, cy, d)
+            local f = Instance.new("Frame")
+            f.AnchorPoint = Vector2.new(0.5, 0.5)
+            f.Position = UDim2.new(0, cx * s, 0, cy * s)
+            f.Size = UDim2.new(0, d * s, 0, d * s)
+            Instance.new("UICorner", f).CornerRadius = UDim.new(0.5, 0)
+            fill(f)
+        end
+        function H.ring(x, y, w, h, th, rnd)
+            local f = Instance.new("Frame")
+            f.BackgroundTransparency = 1
+            f.BorderSizePixel = 0
+            f.Position = UDim2.new(0, (x + th) * s, 0, (y + th) * s)
+            f.Size = UDim2.new(0, (w - 2 * th) * s, 0, (h - 2 * th) * s)
+            Instance.new("UICorner", f).CornerRadius = UDim.new(rnd or 0.5, 0)
+            local st = Instance.new("UIStroke", f)
+            st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+            st.Thickness = math.max(1, th * s)
+            st.Color = color
+            f.Parent = root
+            table.insert(painters, function(c) st.Color = c end)
+        end
+
+        local draw = IconDefs[key]
+        if draw then draw(H) else H.dot(8, 8, 6) end
+        IconPaint[root] = function(c)
+            for _, p in ipairs(painters) do p(c) end
+        end
+        root.Parent = parent
+        return root
     end
 
-    local root = Instance.new("Frame")
-    root.BackgroundTransparency = 1
-    root.BorderSizePixel = 0
-    root.Size = UDim2.new(0, size, 0, size)
-    local s = size / 16
-    local painters = {}
-
-    local function fill(f)
-        f.BorderSizePixel = 0
-        f.BackgroundColor3 = color
-        f.Parent = root
-        table.insert(painters, function(c) f.BackgroundColor3 = c end)
+    SetIconColor = function(ic, color)
+        local paint = IconPaint[ic]
+        if paint then paint(color)
+        elseif ic:IsA("ImageLabel") then ic.ImageColor3 = color end
     end
-
-    local H = {}
-    function H.line(x1, y1, x2, y2, th)
-        local dx, dy = x2 - x1, y2 - y1
-        local len = math.sqrt(dx * dx + dy * dy)
-        local f = Instance.new("Frame")
-        f.AnchorPoint = Vector2.new(0.5, 0.5)
-        f.Position = UDim2.new(0, (x1 + x2) / 2 * s, 0, (y1 + y2) / 2 * s)
-        f.Size = UDim2.new(0, (len + th) * s, 0, th * s)
-        f.Rotation = math.deg(math.atan2(dy, dx))
-        Instance.new("UICorner", f).CornerRadius = UDim.new(0.5, 0)
-        fill(f)
-    end
-    function H.rect(x, y, w, h, rnd)
-        local f = Instance.new("Frame")
-        f.Position = UDim2.new(0, x * s, 0, y * s)
-        f.Size = UDim2.new(0, w * s, 0, h * s)
-        Instance.new("UICorner", f).CornerRadius = UDim.new(rnd or 0, 0)
-        fill(f)
-    end
-    function H.dot(cx, cy, d)
-        local f = Instance.new("Frame")
-        f.AnchorPoint = Vector2.new(0.5, 0.5)
-        f.Position = UDim2.new(0, cx * s, 0, cy * s)
-        f.Size = UDim2.new(0, d * s, 0, d * s)
-        Instance.new("UICorner", f).CornerRadius = UDim.new(0.5, 0)
-        fill(f)
-    end
-    function H.ring(x, y, w, h, th, rnd)
-        local f = Instance.new("Frame")
-        f.BackgroundTransparency = 1
-        f.BorderSizePixel = 0
-        f.Position = UDim2.new(0, (x + th) * s, 0, (y + th) * s)
-        f.Size = UDim2.new(0, (w - 2 * th) * s, 0, (h - 2 * th) * s)
-        Instance.new("UICorner", f).CornerRadius = UDim.new(rnd or 0.5, 0)
-        local st = Instance.new("UIStroke", f)
-        st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        st.Thickness = math.max(1, th * s)
-        st.Color = color
-        f.Parent = root
-        table.insert(painters, function(c) st.Color = c end)
-    end
-
-    local draw = IconDefs[key]
-    if draw then draw(H) else H.dot(8, 8, 6) end
-    IconPaint[root] = function(c)
-        for _, p in ipairs(painters) do p(c) end
-    end
-    root.Parent = parent
-    return root
-end
-
-local function SetIconColor(ic, color)
-    local paint = IconPaint[ic]
-    if paint then paint(color)
-    elseif ic:IsA("ImageLabel") then ic.ImageColor3 = color end
 end
 
 local function NewLabel(parent, text, size, font, color, align)
@@ -1307,6 +1319,18 @@ local function NewLabel(parent, text, size, font, color, align)
     return l
 end
 
+-- gaya scrollbar seragam (tipis, warna aksen)
+local function StyleScrollbar(sf)
+    sf.BorderSizePixel = 0
+    sf.ScrollBarThickness = 4
+    sf.ScrollBarImageColor3 = Colors.Accent
+    sf.ScrollBarImageTransparency = 0
+    sf.VerticalScrollBarInset = Enum.ScrollBarInset.Always
+    sf.ScrollingDirection = Enum.ScrollingDirection.Y
+    sf.CanvasSize = UDim2.new(0, 0, 0, 0)
+    sf.AutomaticCanvasSize = Enum.AutomaticSize.Y
+end
+
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "VZiir0HubGlass"
 ScreenGui.ResetOnSpawn = false
@@ -1314,89 +1338,197 @@ ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = CoreGui
 _G.StealEgg_Hub_UI = ScreenGui
 
+-- ═══════════ [ FRAME UTAMA ] ═══════════
+local SIDEBAR_W = 150
+local FRAME_W, FRAME_H = 580, 400
+
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 340, 0, 374)
+MainFrame.Size = UDim2.new(0, FRAME_W, 0, FRAME_H)
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.BackgroundColor3 = Colors.Background
-MainFrame.BackgroundTransparency = 0.05
+MainFrame.BackgroundTransparency = 0.02
 MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
 MainFrame.Active = true
 MainFrame.Draggable = true
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 16)
-local MainBorder = Instance.new("UIStroke", MainFrame)
-MainBorder.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-MainBorder.Color = Colors.Border
-MainBorder.Thickness = 1
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 14)
+do
+    local MainBorder = Instance.new("UIStroke", MainFrame)
+    MainBorder.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    MainBorder.Color = Colors.Border
+    MainBorder.Thickness = 1
 
--- ── Header ──────────────────────────────────────────────
-local TopBar = Instance.new("Frame", MainFrame)
-TopBar.Size = UDim2.new(1, 0, 0, 34)
-TopBar.BackgroundTransparency = 1
+    -- auto-scale untuk layar kecil (HP)
+    local MainScale = Instance.new("UIScale", MainFrame)
+    local function UpdateScale()
+        local vp = ScreenGui.AbsoluteSize
+        if vp.X < 50 or vp.Y < 50 then
+            local cam = workspace.CurrentCamera
+            vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
+        end
+        local sc = math.min(1, (vp.X - 16) / FRAME_W, (vp.Y - 16) / FRAME_H)
+        MainScale.Scale = math.clamp(sc, 0.4, 1)
+    end
+    UpdateScale()
+    ScreenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateScale)
+end
 
-local LogoIcon = MakeIcon(TopBar, "egg", 18, Colors.Accent)
-LogoIcon.Position = UDim2.new(0, 12, 0.5, -9)
+-- ═══════════ [ WIDGET (kartu, tile, saklar, tombol) ] ═══════════
+-- kartu dengan header (klik header = lipat/buka)
+W.Card = function(parent, title, iconKey, bodyH, order)
+    local full = 36 + bodyH + 6
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, full)
+    card.BackgroundColor3 = Colors.GlassPanel
+    card.BorderSizePixel = 0
+    card.LayoutOrder = order or 0
+    card.ClipsDescendants = true
+    card.Parent = parent
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 10)
+    local st = Instance.new("UIStroke", card)
+    st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    st.Thickness = 1
+    st.Color = Colors.Border
 
-local Title = NewLabel(TopBar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
-Title.Size = UDim2.new(0, 56, 1, 0)
-Title.Position = UDim2.new(0, 36, 0, 0)
+    local ic = MakeIcon(card, iconKey, 15, Colors.Accent)
+    ic.Position = UDim2.new(0, 12, 0, 8)
+    local t = NewLabel(card, title, 12, Enum.Font.GothamBold, Colors.Text)
+    t.Size = UDim2.new(0, 120, 0, 30)
+    t.Position = UDim2.new(0, 34, 0, 0)
 
-local StatusPill = Instance.new("Frame", TopBar)
-StatusPill.Size = UDim2.new(0, 84, 0, 20)
-StatusPill.Position = UDim2.new(0, 98, 0.5, -10)
-StatusPill.BackgroundColor3 = Colors.GlassPanel
-Instance.new("UICorner", StatusPill).CornerRadius = UDim.new(1, 0)
-local PillDot = Instance.new("Frame", StatusPill)
-PillDot.Size = UDim2.new(0, 6, 0, 6)
-PillDot.Position = UDim2.new(0, 9, 0.5, -3)
-PillDot.BackgroundColor3 = Colors.TextDim
-Instance.new("UICorner", PillDot).CornerRadius = UDim.new(1, 0)
-local PillLbl = NewLabel(StatusPill, "Idle", 10, Enum.Font.GothamMedium, Colors.TextDim)
-PillLbl.Size = UDim2.new(1, -22, 1, 0)
-PillLbl.Position = UDim2.new(0, 20, 0, 0)
+    local chev = MakeIcon(card, "chevron", 14, Colors.TextDim)
+    chev.AnchorPoint = Vector2.new(0.5, 0.5)
+    chev.Position = UDim2.new(1, -19, 0, 15)
 
-local CloseBtn = Instance.new("TextButton", TopBar)
-CloseBtn.Size = UDim2.new(0, 26, 0, 26)
-CloseBtn.Position = UDim2.new(1, -32, 0, 4)
-CloseBtn.BackgroundTransparency = 1
-CloseBtn.Text = ""
-local CloseIcon = MakeIcon(CloseBtn, "close", 14, Colors.TextDim)
-CloseIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-CloseIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
-CloseBtn.MouseEnter:Connect(function() SetIconColor(CloseIcon, Colors.Danger) end)
-CloseBtn.MouseLeave:Connect(function() SetIconColor(CloseIcon, Colors.TextDim) end)
-CloseBtn.MouseButton1Click:Connect(function()
-    _G.StealEgg_Hub_Active = false
-    ScreenGui:Destroy()
-end)
+    local div = Instance.new("Frame", card)
+    div.Size = UDim2.new(1, -24, 0, 1)
+    div.Position = UDim2.new(0, 12, 0, 30)
+    div.BackgroundColor3 = Colors.Border
+    div.BorderSizePixel = 0
 
-local MinBtn = Instance.new("TextButton", TopBar)
-MinBtn.Size = UDim2.new(0, 26, 0, 26)
-MinBtn.Position = UDim2.new(1, -60, 0, 4)
-MinBtn.BackgroundTransparency = 1
-MinBtn.Text = ""
-local MinIcon = MakeIcon(MinBtn, "minus", 14, Colors.TextDim)
-MinIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-MinIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
-MinBtn.MouseEnter:Connect(function() SetIconColor(MinIcon, Colors.Text) end)
-MinBtn.MouseLeave:Connect(function() SetIconColor(MinIcon, Colors.TextDim) end)
+    local body = Instance.new("Frame", card)
+    body.Size = UDim2.new(1, -24, 0, bodyH)
+    body.Position = UDim2.new(0, 12, 0, 36)
+    body.BackgroundTransparency = 1
 
--- ── Tab bar (segmented) ─────────────────────────────────
-local TabBar = Instance.new("Frame", MainFrame)
-TabBar.Size = UDim2.new(1, -24, 0, 30)
-TabBar.Position = UDim2.new(0, 12, 0, 36)
-TabBar.BackgroundColor3 = Colors.GlassPanel
-Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 10)
+    local hdr = Instance.new("TextButton", card)
+    hdr.Size = UDim2.new(1, 0, 0, 30)
+    hdr.BackgroundTransparency = 1
+    hdr.Text = ""
+    hdr.ZIndex = 2
+    local collapsed = false
+    hdr.MouseButton1Click:Connect(function()
+        collapsed = not collapsed
+        body.Visible = not collapsed
+        div.Visible = not collapsed
+        chev.Rotation = collapsed and -90 or 0
+        TweenService:Create(card, TweenInfo.new(0.15), { Size = UDim2.new(1, 0, 0, collapsed and 30 or full) }):Play()
+    end)
+    return card, body
+end
 
-local function CreateTabButton(name, iconKey, xScale, xOffset)
+-- baris horizontal untuk tile
+W.Row = function(parent, h, y)
+    local row = Instance.new("Frame", parent)
+    row.Size = UDim2.new(1, 0, 0, h)
+    row.Position = UDim2.new(0, 0, 0, y or 0)
+    row.BackgroundTransparency = 1
+    local lay = Instance.new("UIListLayout", row)
+    lay.FillDirection = Enum.FillDirection.Horizontal
+    lay.SortOrder = Enum.SortOrder.LayoutOrder
+    lay.Padding = UDim.new(0, 6)
+    return row
+end
+
+-- tile angka (nilai besar + keterangan kecil); mengembalikan label nilai & keterangan
+W.Tile = function(parent, w, order, value, caption)
+    local T = Instance.new("Frame")
+    T.Size = UDim2.new(0, w, 0, 36)
+    T.BackgroundColor3 = Colors.Tile
+    T.BorderSizePixel = 0
+    T.LayoutOrder = order
+    T.Parent = parent
+    Instance.new("UICorner", T).CornerRadius = UDim.new(0, 8)
+    local V = NewLabel(T, value, 13, Enum.Font.GothamBold, Colors.Text)
+    V.Size = UDim2.new(1, -12, 0, 16)
+    V.Position = UDim2.new(0, 6, 0, 4)
+    V.TextScaled = true
+    local c = Instance.new("UITextSizeConstraint", V)
+    c.MaxTextSize = 13
+    c.MinTextSize = 8
+    local C = NewLabel(T, caption, 10, Enum.Font.Gotham, Colors.TextDim)
+    C.Size = UDim2.new(1, -12, 0, 12)
+    C.Position = UDim2.new(0, 6, 0, 21)
+    C.TextTruncate = Enum.TextTruncate.AtEnd
+    return V, C
+end
+
+-- baris saklar ringkas (26px) dengan callback; API: SetState / GetState / Callback
+W.Switch = function(parent, title, iconKey, order, defaultState, callback)
     local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(1/3, -4, 1, -6)
-    Btn.Position = UDim2.new(xScale, xOffset, 0, 3)
-    Btn.BackgroundColor3 = Colors.Accent
-    Btn.BackgroundTransparency = 1
+    Btn.Size = UDim2.new(1, 0, 0, 26)
+    Btn.BackgroundColor3 = Colors.Tile
     Btn.AutoButtonColor = false
     Btn.Text = ""
-    Btn.Parent = TabBar
+    Btn.LayoutOrder = order
+    Btn.Parent = parent
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 8)
+    local Stroke = Instance.new("UIStroke", Btn)
+    Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    Stroke.Thickness = 1
+    Stroke.Color = Colors.Border
+
+    local Ic = MakeIcon(Btn, iconKey, 15, Colors.TextDim)
+    Ic.Position = UDim2.new(0, 9, 0.5, -7)
+    local T = NewLabel(Btn, title, 12, Enum.Font.GothamMedium, Colors.Text)
+    T.Size = UDim2.new(1, -84, 1, 0)
+    T.Position = UDim2.new(0, 32, 0, 0)
+    T.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local SwTrack = Instance.new("Frame", Btn)
+    SwTrack.Size = UDim2.new(0, 34, 0, 18)
+    SwTrack.Position = UDim2.new(1, -42, 0.5, -9)
+    SwTrack.BackgroundColor3 = Colors.SwitchOff
+    SwTrack.BorderSizePixel = 0
+    Instance.new("UICorner", SwTrack).CornerRadius = UDim.new(1, 0)
+    local Knob = Instance.new("Frame", SwTrack)
+    Knob.Size = UDim2.new(0, 14, 0, 14)
+    Knob.Position = UDim2.new(0, 2, 0.5, -7)
+    Knob.BackgroundColor3 = Colors.Text
+    Knob.BorderSizePixel = 0
+    Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
+
+    local isOn = defaultState and true or false
+    local function paint()
+        local info = TweenInfo.new(0.18)
+        TweenService:Create(SwTrack, info, {BackgroundColor3 = isOn and Colors.Accent or Colors.SwitchOff}):Play()
+        TweenService:Create(Knob, info, {Position = isOn and UDim2.new(0, 18, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)}):Play()
+        TweenService:Create(Stroke, info, {Color = isOn and Colors.Accent or Colors.Border}):Play()
+        SetIconColor(Ic, isOn and Colors.Accent or Colors.TextDim)
+    end
+    paint()
+    Btn.MouseButton1Click:Connect(function()
+        isOn = not isOn
+        paint()
+        if callback then callback(isOn) end
+    end)
+    return {
+        SetState = function(state) isOn = state and true or false; paint() end,
+        GetState = function() return isOn end,
+        Callback = callback,
+    }
+end
+
+-- tombol aksi (ikon + teks); filled = latar aksen
+W.Button = function(parent, text, iconKey, filled)
+    local fg = filled and Colors.OnAccent or Colors.Text
+    local bg = filled and Colors.Accent or Colors.Tile
+    local Btn = Instance.new("TextButton")
+    Btn.AutoButtonColor = false
+    Btn.Text = ""
+    Btn.BackgroundColor3 = bg
+    Btn.Parent = parent
     Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 8)
     local Row = Instance.new("Frame", Btn)
     Row.Size = UDim2.new(1, 0, 1, 0)
@@ -1407,713 +1539,777 @@ local function CreateTabButton(name, iconKey, xScale, xOffset)
     Lay.VerticalAlignment = Enum.VerticalAlignment.Center
     Lay.SortOrder = Enum.SortOrder.LayoutOrder
     Lay.Padding = UDim.new(0, 6)
-    local Ic = MakeIcon(Row, iconKey, 14, Colors.TextDim)
+    local Ic = MakeIcon(Row, iconKey, 14, filled and fg or Colors.Accent)
     Ic.LayoutOrder = 1
-    local Txt = NewLabel(Row, name, 12, Enum.Font.GothamMedium, Colors.TextDim)
-    Txt.AutomaticSize = Enum.AutomaticSize.X
-    Txt.Size = UDim2.new(0, 0, 1, 0)
-    Txt.LayoutOrder = 2
-    local active = false
-    Btn.MouseEnter:Connect(function() if not active then Txt.TextColor3 = Colors.Text end end)
-    Btn.MouseLeave:Connect(function() if not active then Txt.TextColor3 = Colors.TextDim end end)
-    local function SetActive(isActive)
-        active = isActive
-        TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = isActive and 0 or 1}):Play()
-        Txt.TextColor3 = isActive and Colors.OnAccent or Colors.TextDim
-        SetIconColor(Ic, isActive and Colors.OnAccent or Colors.TextDim)
-    end
-    return Btn, SetActive
-end
-
-local MonitorBtn, SetMonitorActive = CreateTabButton("Monitor", "monitor", 0, 2)
-local EggBtn, SetEggActive = CreateTabButton("Egg", "backpack", 1/3, 2)
-local ServerBtn, SetServerActive = CreateTabButton("Server", "server", 2/3, 2)
-
-local ContentArea = Instance.new("Frame", MainFrame)
-ContentArea.Size = UDim2.new(1, -24, 1, -118)
-ContentArea.Position = UDim2.new(0, 12, 0, 74)
-ContentArea.BackgroundTransparency = 1
-
--- ── Chip toggle (pengganti switch) ──────────────────────
-local function CreateChipToggle(parent, text, iconKey, layoutOrder, defaultState, callback, width)
-    local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(0, width or 101, 1, 0)
-    Btn.BackgroundColor3 = Colors.GlassPanel
-    Btn.AutoButtonColor = false
-    Btn.Text = ""
-    Btn.LayoutOrder = layoutOrder
-    Btn.Parent = parent
-    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 10)
-    local Stroke = Instance.new("UIStroke", Btn)
-    Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    Stroke.Thickness = 1
-    Stroke.Color = Colors.Border
-    local Ic = MakeIcon(Btn, iconKey, 16, Colors.TextDim)
-    Ic.Position = UDim2.new(0, 10, 0.5, -8)
-    local Lbl = NewLabel(Btn, text, 11, Enum.Font.GothamMedium, Colors.TextDim)
-    Lbl.Size = UDim2.new(1, -34, 1, 0)
-    Lbl.Position = UDim2.new(0, 32, 0, 0)
-    Lbl.TextTruncate = Enum.TextTruncate.AtEnd
-    local isOn = defaultState
-    local function paint()
-        local info = TweenInfo.new(0.2)
-        TweenService:Create(Btn, info, {BackgroundColor3 = isOn and Colors.ChipOn or Colors.GlassPanel}):Play()
-        TweenService:Create(Stroke, info, {Color = isOn and Colors.Accent or Colors.Border}):Play()
-        TweenService:Create(Lbl, info, {TextColor3 = isOn and Colors.Accent or Colors.TextDim}):Play()
-        SetIconColor(Ic, isOn and Colors.Accent or Colors.TextDim)
-    end
-    paint()
-    Btn.MouseEnter:Connect(function()
-        if not isOn then TweenService:Create(Btn, TweenInfo.new(0.15), {BackgroundColor3 = Colors.SwitchOff}):Play() end
-    end)
-    Btn.MouseLeave:Connect(function()
-        if not isOn then TweenService:Create(Btn, TweenInfo.new(0.15), {BackgroundColor3 = Colors.GlassPanel}):Play() end
-    end)
-    Btn.MouseButton1Click:Connect(function()
-        local newState = not isOn
-        isOn = newState
-        paint()
-        if callback then callback(newState) end
-    end)
-    return {
-        SetState = function(state) isOn = state; paint() end,
-        GetState = function() return isOn end,
-        Callback = callback,
-    }
-end
-
--- ── TAB MONITOR ─────────────────────────────────────────
-local MonitorTab = Instance.new("Frame", ContentArea)
-MonitorTab.Size = UDim2.new(1, 0, 1, 0)
-MonitorTab.BackgroundTransparency = 1
-
--- Langkah: Farming > Hop > Egg
-local StepsRow = Instance.new("Frame", MonitorTab)
-StepsRow.Size = UDim2.new(1, 0, 0, 22)
-StepsRow.BackgroundTransparency = 1
-local StepsLayout = Instance.new("UIListLayout", StepsRow)
-StepsLayout.FillDirection = Enum.FillDirection.Horizontal
-StepsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-StepsLayout.Padding = UDim.new(0, 6)
-
-local StepNames = { "Farming", "Hop", "Egg" }
-local StepIconKeys = { "egg", "hop", "egg" }
-local StepPills = {}
-for i, nm in ipairs(StepNames) do
-    local P = Instance.new("Frame")
-    P.Size = UDim2.new(0, 101, 1, 0)
-    P.BackgroundColor3 = Colors.GlassPanel
-    P.LayoutOrder = i
-    P.Parent = StepsRow
-    Instance.new("UICorner", P).CornerRadius = UDim.new(0, 8)
-    local Row = Instance.new("Frame", P)
-    Row.Size = UDim2.new(1, 0, 1, 0)
-    Row.BackgroundTransparency = 1
-    local Lay = Instance.new("UIListLayout", Row)
-    Lay.FillDirection = Enum.FillDirection.Horizontal
-    Lay.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    Lay.VerticalAlignment = Enum.VerticalAlignment.Center
-    Lay.SortOrder = Enum.SortOrder.LayoutOrder
-    Lay.Padding = UDim.new(0, 5)
-    local Ic = MakeIcon(Row, StepIconKeys[i], 12, Colors.TextDim)
-    Ic.LayoutOrder = 1
-    local Ck = MakeIcon(Row, "check", 12, Colors.Green)
-    Ck.LayoutOrder = 1
-    Ck.Visible = false
-    local L = NewLabel(Row, nm, 10, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
-    L.AutomaticSize = Enum.AutomaticSize.X
-    L.Size = UDim2.new(0, 0, 1, 0)
-    L.LayoutOrder = 2
-    StepPills[i] = { Frame = P, Label = L, Icon = Ic, Check = Ck }
-end
-
--- Ring progress (dua setengah lingkaran + UIGradient pada UIStroke)
-local RING_SIZE, RING_T = 96, 8
-local RingHolder = Instance.new("Frame", MonitorTab)
-RingHolder.Size = UDim2.new(0, RING_SIZE, 0, RING_SIZE)
-RingHolder.Position = UDim2.new(0.5, -RING_SIZE / 2, 0, 28)
-RingHolder.BackgroundTransparency = 1
-
-local Track = Instance.new("Frame", RingHolder)
-Track.Size = UDim2.new(1, -RING_T * 2, 1, -RING_T * 2)
-Track.Position = UDim2.new(0, RING_T, 0, RING_T)
-Track.BackgroundTransparency = 1
-Instance.new("UICorner", Track).CornerRadius = UDim.new(1, 0)
-local TrackStroke = Instance.new("UIStroke", Track)
-TrackStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-TrackStroke.Thickness = RING_T
-TrackStroke.Color = Colors.Track
-
-local function MakeHalf(isRight)
-    local Clip = Instance.new("Frame", RingHolder)
-    Clip.Size = UDim2.new(0.5, 0, 1, 0)
-    Clip.Position = isRight and UDim2.new(0.5, 0, 0, 0) or UDim2.new(0, 0, 0, 0)
-    Clip.BackgroundTransparency = 1
-    Clip.ClipsDescendants = true
-    local Circ = Instance.new("Frame", Clip)
-    Circ.Size = UDim2.new(2, -RING_T * 2, 1, -RING_T * 2)
-    Circ.Position = isRight and UDim2.new(-1, RING_T, 0, RING_T) or UDim2.new(0, RING_T, 0, RING_T)
-    Circ.BackgroundTransparency = 1
-    Instance.new("UICorner", Circ).CornerRadius = UDim.new(1, 0)
-    local St = Instance.new("UIStroke", Circ)
-    St.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    St.Thickness = RING_T
-    St.Color = Colors.Accent
-    local Gr = Instance.new("UIGradient", St)
-    Gr.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0),
-        NumberSequenceKeypoint.new(0.5, 0),
-        NumberSequenceKeypoint.new(0.501, 1),
-        NumberSequenceKeypoint.new(1, 1),
-    })
-    return Gr, St
-end
-local RightGrad, RightStroke = MakeHalf(true)
-local LeftGrad, LeftStroke = MakeHalf(false)
-
-local function SetRing(p)
-    local angle = math.clamp(p, 0, 1) * 360
-    RightGrad.Rotation = math.clamp(angle, 0, 180)
-    LeftGrad.Rotation = math.clamp(angle - 180, 0, 180) - 180
-end
-SetRing(0)
-
-local PercentLbl = NewLabel(RingHolder, "—", 20, Enum.Font.GothamBold, Colors.Text, Enum.TextXAlignment.Center)
-PercentLbl.Size = UDim2.new(1, 0, 0, 24)
-PercentLbl.Position = UDim2.new(0, 0, 0.5, -18)
-PercentLbl.ZIndex = 5
-local SubLbl = NewLabel(RingHolder, "Idle", 10, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
-SubLbl.Size = UDim2.new(1, 0, 0, 14)
-SubLbl.Position = UDim2.new(0, 0, 0.5, 6)
-SubLbl.ZIndex = 5
-
-local CaptionLbl = NewLabel(MonitorTab, "Aktifkan monitor di bawah", 12, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
-CaptionLbl.Size = UDim2.new(1, 0, 0, 16)
-CaptionLbl.Position = UDim2.new(0, 0, 0, 126)
-CaptionLbl.TextTruncate = Enum.TextTruncate.AtEnd
-
--- Kartu statistik: Egg, Hop, Auto Place
-local StatsRow = Instance.new("Frame", MonitorTab)
-StatsRow.Size = UDim2.new(1, 0, 0, 38)
-StatsRow.Position = UDim2.new(0, 0, 0, 148)
-StatsRow.BackgroundTransparency = 1
-local StatsLayout = Instance.new("UIListLayout", StatsRow)
-StatsLayout.FillDirection = Enum.FillDirection.Horizontal
-StatsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-StatsLayout.Padding = UDim.new(0, 6)
-
-local function CreateStatCard(iconKey, caption, order)
-    local C = Instance.new("Frame")
-    C.Size = UDim2.new(0, 101, 1, 0)
-    C.BackgroundColor3 = Colors.GlassPanel
-    C.LayoutOrder = order
-    C.Parent = StatsRow
-    Instance.new("UICorner", C).CornerRadius = UDim.new(0, 10)
-    local Ic = MakeIcon(C, iconKey, 16, Colors.Accent)
-    Ic.Position = UDim2.new(0, 9, 0.5, -8)
-    local Val = NewLabel(C, "—", 14, Enum.Font.GothamBold, Colors.Text)
-    Val.Size = UDim2.new(1, -34, 0, 18)
-    Val.Position = UDim2.new(0, 32, 0, 4)
-    local Cap = NewLabel(C, caption, 9, Enum.Font.Gotham, Colors.TextDim)
-    Cap.Size = UDim2.new(1, -34, 0, 12)
-    Cap.Position = UDim2.new(0, 32, 0, 22)
-    Cap.TextTruncate = Enum.TextTruncate.AtEnd
-    return { Val = Val, Cap = Cap }
-end
-local StatEgg = CreateStatCard("egg", "Egg", 1)
-local StatHop = CreateStatCard("hop", "Hop", 2)
-local StatPlace = CreateStatCard("bolt", "Auto Place", 3)
-
--- Toggle: Monitor + Webhook manual
-local ChipsRow = Instance.new("Frame", MonitorTab)
-ChipsRow.Size = UDim2.new(1, 0, 0, 30)
-ChipsRow.Position = UDim2.new(0, 0, 0, 192)
-ChipsRow.BackgroundTransparency = 1
-local ChipsLayout = Instance.new("UIListLayout", ChipsRow)
-ChipsLayout.FillDirection = Enum.FillDirection.Horizontal
-ChipsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-ChipsLayout.Padding = UDim.new(0, 6)
-
-local webhookToggle -- Deklarasi awal
-
--- Toggle Monitor
-local monitorToggle = CreateChipToggle(ChipsRow, "Monitor Egg", "egg", 1, config.MonitorEnabled, function(state)
-    config.MonitorEnabled = state
-    is_monitoring = state
-    
-    if state then
-        -- ⭐ NYALAIN AUTO PLACE (BigFroot + Nasi Rendang + Ajjans + Venyx)
-        setBigFrootAutoPlace(true) 
-        _G.setNasiRendangAutoPlace(true) 
-        setAjjansAutoPlace(true)
-        setVenyxAutoPlace(true)
-        
-        if webhookToggle then webhookToggle.SetState(false) end 
-        config.WebhookEnabled = false 
-        
-        local initial = scanCurrentPlayers()
-        config.OriginalTargets = {}
-        for _, n in ipairs(initial) do table.insert(config.OriginalTargets, n) end
-        config.DetectedTargets = {}
-        for _, n in ipairs(initial) do table.insert(config.DetectedTargets, n) end
-        print("📋 [Target] Snapshot awal: " .. #config.DetectedTargets .. " player.")
-        
-        StarterGui:SetCore("SendNotification", {Title = "Monitor Egg ON", Text = "Auto Place (BigFroot, Nasi Rendang, Ajjans, Venyx) aktif.", Duration = 5})
-    else
-        -- ⭐ MATIIN AUTO PLACE (BigFroot + Nasi Rendang + Ajjans + Venyx)
-        setBigFrootAutoPlace(false) 
-        _G.setNasiRendangAutoPlace(false)
-        setAjjansAutoPlace(false)
-        setVenyxAutoPlace(false)
-        
-        StarterGui:SetCore("SendNotification", {Title = "Monitor Egg OFF", Text = "Monitor & Auto Place berhenti.", Duration = 3})
-    end
-    saveConfig()
-end, 155)
-
--- Toggle Webhook Manual
-webhookToggle = CreateChipToggle(ChipsRow, "Webhook Manual", "send", 2, config.WebhookEnabled, function(state)
-    if is_monitoring then
-        webhookToggle.SetState(false)
-        StarterGui:SetCore("SendNotification", {Title = "Webhook Terkunci", Text = "Matikan Monitor dulu kalau mau pake webhook manual.", Duration = 4})
-        return
-    end
-    
-    config.WebhookEnabled = state
-    saveConfig()
-    if state then
-        StarterGui:SetCore("SendNotification", {Title = "Webhook Manual Aktif", Text = "Monitor akan dikirim ke Discord.", Duration = 3})
-    end
-end, 155)
-
--- Tombol Reset Target (pindah ke tab Monitor, isi handler sama persis)
-local ResetTargetBtn = Instance.new("TextButton", MonitorTab)
-ResetTargetBtn.Size = UDim2.new(1, 0, 0, 28)
-ResetTargetBtn.Position = UDim2.new(0, 0, 0, 228)
-ResetTargetBtn.BackgroundColor3 = Colors.GlassPanel
-ResetTargetBtn.AutoButtonColor = false
-ResetTargetBtn.Text = ""
-Instance.new("UICorner", ResetTargetBtn).CornerRadius = UDim.new(0, 10)
-local ResetStroke = Instance.new("UIStroke", ResetTargetBtn)
-ResetStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-ResetStroke.Thickness = 1
-ResetStroke.Color = Colors.Border
-local ResetRow = Instance.new("Frame", ResetTargetBtn)
-ResetRow.Size = UDim2.new(1, 0, 1, 0)
-ResetRow.BackgroundTransparency = 1
-local ResetLay = Instance.new("UIListLayout", ResetRow)
-ResetLay.FillDirection = Enum.FillDirection.Horizontal
-ResetLay.HorizontalAlignment = Enum.HorizontalAlignment.Center
-ResetLay.VerticalAlignment = Enum.VerticalAlignment.Center
-ResetLay.SortOrder = Enum.SortOrder.LayoutOrder
-ResetLay.Padding = UDim.new(0, 7)
-local ResetIcon = MakeIcon(ResetRow, "scan", 14, Colors.TextDim)
-ResetIcon.LayoutOrder = 1
-local ResetLbl = NewLabel(ResetRow, "Reset & Scan Target", 11, Enum.Font.GothamMedium, Colors.TextDim)
-ResetLbl.AutomaticSize = Enum.AutomaticSize.X
-ResetLbl.Size = UDim2.new(0, 0, 1, 0)
-ResetLbl.LayoutOrder = 2
-ResetTargetBtn.MouseEnter:Connect(function() TweenService:Create(ResetTargetBtn, TweenInfo.new(0.15), {BackgroundColor3 = Colors.SwitchOff}):Play() end)
-ResetTargetBtn.MouseLeave:Connect(function() TweenService:Create(ResetTargetBtn, TweenInfo.new(0.15), {BackgroundColor3 = Colors.GlassPanel}):Play() end)
-ResetTargetBtn.MouseButton1Click:Connect(function()
-    local fresh = scanCurrentPlayers()
-    config.DetectedTargets = {}
-    config.OriginalTargets = {}
-    for _, n in ipairs(fresh) do
-        table.insert(config.DetectedTargets, n)
-        table.insert(config.OriginalTargets, n)
-    end
-    saveConfig()
-    print("🔄 [Target] Reset. Sekarang: " .. #config.DetectedTargets .. " player.")
-    StarterGui:SetCore("SendNotification", {Title = "Target Reset", Text = #config.DetectedTargets .. " player terscan ulang.", Duration = 3})
-end)
-
--- ── TAB EGG (isi backpack) ──────────────────────────────
-local EggTab = Instance.new("Frame", ContentArea)
-EggTab.Size = UDim2.new(1, 0, 1, 0)
-EggTab.BackgroundTransparency = 1
-EggTab.Visible = false
-
-local EggCard = Instance.new("Frame", EggTab)
-EggCard.Size = UDim2.new(1, 0, 0, 70)
-EggCard.BackgroundColor3 = Colors.GlassPanel
-Instance.new("UICorner", EggCard).CornerRadius = UDim.new(0, 12)
-
-local EggCardIcon = MakeIcon(EggCard, "backpack", 22, Colors.Accent)
-EggCardIcon.Position = UDim2.new(0, 12, 0, 9)
-local EggTotal = NewLabel(EggCard, "0", 20, Enum.Font.GothamBold, Colors.Text)
-EggTotal.Size = UDim2.new(0, 80, 0, 22)
-EggTotal.Position = UDim2.new(0, 42, 0, 6)
-local EggTotalCap = NewLabel(EggCard, "egg di backpack", 10, Enum.Font.Gotham, Colors.TextDim)
-EggTotalCap.Size = UDim2.new(0, 110, 0, 12)
-EggTotalCap.Position = UDim2.new(0, 42, 0, 28)
-
-local RefreshBtn = Instance.new("TextButton", EggCard)
-RefreshBtn.Size = UDim2.new(0, 86, 0, 26)
-RefreshBtn.Position = UDim2.new(1, -98, 0, 10)
-RefreshBtn.BackgroundTransparency = 1
-RefreshBtn.AutoButtonColor = false
-RefreshBtn.Text = ""
-Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 8)
-local RefreshStroke = Instance.new("UIStroke", RefreshBtn)
-RefreshStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-RefreshStroke.Thickness = 1
-RefreshStroke.Color = Colors.Accent
-local RefreshRow = Instance.new("Frame", RefreshBtn)
-RefreshRow.Size = UDim2.new(1, 0, 1, 0)
-RefreshRow.BackgroundTransparency = 1
-local RefreshLay = Instance.new("UIListLayout", RefreshRow)
-RefreshLay.FillDirection = Enum.FillDirection.Horizontal
-RefreshLay.HorizontalAlignment = Enum.HorizontalAlignment.Center
-RefreshLay.VerticalAlignment = Enum.VerticalAlignment.Center
-RefreshLay.SortOrder = Enum.SortOrder.LayoutOrder
-RefreshLay.Padding = UDim.new(0, 6)
-local RefreshIcon = MakeIcon(RefreshRow, "refresh", 14, Colors.Accent)
-RefreshIcon.LayoutOrder = 1
-local RefreshLbl = NewLabel(RefreshRow, "Refresh", 11, Enum.Font.GothamMedium, Colors.Accent)
-RefreshLbl.AutomaticSize = Enum.AutomaticSize.X
-RefreshLbl.Size = UDim2.new(0, 0, 1, 0)
-RefreshLbl.LayoutOrder = 2
-RefreshBtn.MouseEnter:Connect(function() TweenService:Create(RefreshBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.85}):Play() end)
-RefreshBtn.MouseLeave:Connect(function() TweenService:Create(RefreshBtn, TweenInfo.new(0.15), {BackgroundTransparency = 1}):Play() end)
-
-local EggBarBg = Instance.new("Frame", EggCard)
-EggBarBg.Size = UDim2.new(1, -24, 0, 6)
-EggBarBg.Position = UDim2.new(0, 12, 0, 48)
-EggBarBg.BackgroundColor3 = Colors.Track
-Instance.new("UICorner", EggBarBg).CornerRadius = UDim.new(1, 0)
-local EggBarFill = Instance.new("Frame", EggBarBg)
-EggBarFill.Size = UDim2.new(0, 0, 1, 0)
-EggBarFill.BackgroundColor3 = Colors.Green
-Instance.new("UICorner", EggBarFill).CornerRadius = UDim.new(1, 0)
-local EggBarName = NewLabel(EggCard, "Egg map terjauh", 9, Enum.Font.Gotham, Colors.TextDim)
-EggBarName.Size = UDim2.new(0.6, 0, 0, 12)
-EggBarName.Position = UDim2.new(0, 12, 0, 56)
-EggBarName.TextTruncate = Enum.TextTruncate.AtEnd
-local EggBarVal = NewLabel(EggCard, "0 / " .. EGG_GOAL, 9, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Right)
-EggBarVal.Size = UDim2.new(0.35, 0, 0, 12)
-EggBarVal.Position = UDim2.new(0.65, -12, 0, 56)
-
-local EggList = Instance.new("ScrollingFrame", EggTab)
-EggList.Size = UDim2.new(1, 0, 1, -76)
-EggList.Position = UDim2.new(0, 0, 0, 76)
-EggList.BackgroundTransparency = 1
-EggList.BorderSizePixel = 0
-EggList.ScrollBarThickness = 3
-EggList.ScrollBarImageColor3 = Colors.Accent
-EggList.CanvasSize = UDim2.new(0, 0, 0, 0)
-EggList.AutomaticCanvasSize = Enum.AutomaticSize.Y
-local EggListLayout = Instance.new("UIListLayout", EggList)
-EggListLayout.Padding = UDim.new(0, 4)
-EggListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-
--- ── Footer: status (ditulis oleh LOOP MONITOR, nama variabel tetap) ──
-local FooterBar = Instance.new("Frame", MainFrame)
-FooterBar.Size = UDim2.new(1, -16, 0, 28)
-FooterBar.Position = UDim2.new(0, 8, 1, -36)
-FooterBar.BackgroundColor3 = Colors.GlassPanel
-Instance.new("UICorner", FooterBar).CornerRadius = UDim.new(0, 8)
-
--- StatusLbl tetap ditulis oleh loop. Label ini disembunyikan, isinya DICERMINKAN
--- ke StatusDisplay lengkap dengan ikon sesuai kondisi.
-local StatusLbl = NewLabel(FooterBar, "Status: " .. (is_monitoring and "Monitor Egg ON" or "Idle"), 11, Enum.Font.GothamMedium, Colors.TextDim)
-StatusLbl.Size = UDim2.new(1, -16, 1, 0)
-StatusLbl.Position = UDim2.new(0, 8, 0, 0)
-StatusLbl.Visible = false
-
-local StatusIcons = {}
-for _, k in ipairs({ "egg", "hourglass", "hop", "checkc" }) do
-    local ic = MakeIcon(FooterBar, k, 14, Colors.TextDim)
-    ic.Position = UDim2.new(0, 9, 0.5, -7)
-    ic.Visible = false
-    StatusIcons[k] = ic
-end
-local StatusDisplay = NewLabel(FooterBar, StatusLbl.Text, 11, Enum.Font.GothamMedium, Colors.TextDim)
-StatusDisplay.Size = UDim2.new(1, -34, 1, 0)
-StatusDisplay.Position = UDim2.new(0, 28, 0, 0)
-StatusDisplay.TextTruncate = Enum.TextTruncate.AtEnd
-
-local function SyncStatus()
-    local raw = StatusLbl.Text
-    local key, col = "egg", Colors.TextDim
-    if raw:find("MASIH ADA", 1, true) then key, col = "hop", Colors.Amber
-    elseif raw:find("HILANG", 1, true) then key, col = "checkc", Colors.Green
-    elseif raw:find("Nunggu", 1, true) then key, col = "hourglass", Colors.Accent
-    elseif raw:find("Egg ON", 1, true) then key, col = "egg", Colors.Green end
-    for k, ic in pairs(StatusIcons) do ic.Visible = (k == key) end
-    SetIconColor(StatusIcons[key], col)
-    StatusDisplay.Text = raw
-    StatusDisplay.TextColor3 = col
-end
-StatusLbl:GetPropertyChangedSignal("Text"):Connect(SyncStatus)
-SyncStatus()
-
--- ── TAB SERVER (JOB ID) ─────────────────────────────────
-local function notify(title, text, dur)
-    pcall(function()
-        StarterGui:SetCore("SendNotification", {Title = title, Text = tostring(text), Duration = dur or 4})
-    end)
-end
-
-local function CreateActionButton(parent, text, iconKey, filled)
-    local fg = filled and Colors.OnAccent or Colors.Accent
-    local Btn = Instance.new("TextButton")
-    Btn.AutoButtonColor = false
-    Btn.Text = ""
-    Btn.BackgroundColor3 = filled and Colors.Accent or Colors.ChipOn
-    Btn.Parent = parent
-    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 10)
-    local Stroke = Instance.new("UIStroke", Btn)
-    Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    Stroke.Thickness = 1
-    Stroke.Color = filled and Colors.Accent or Colors.Border
-
-    local Row = Instance.new("Frame", Btn)
-    Row.Size = UDim2.new(1, 0, 1, 0)
-    Row.BackgroundTransparency = 1
-    local Lay = Instance.new("UIListLayout", Row)
-    Lay.FillDirection = Enum.FillDirection.Horizontal
-    Lay.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    Lay.VerticalAlignment = Enum.VerticalAlignment.Center
-    Lay.SortOrder = Enum.SortOrder.LayoutOrder
-    Lay.Padding = UDim.new(0, 6)
-
-    local Ic = MakeIcon(Row, iconKey, 14, fg)
-    Ic.LayoutOrder = 1
-    local Lbl = NewLabel(Row, text, 12, Enum.Font.GothamMedium, fg, Enum.TextXAlignment.Center)
+    local Lbl = NewLabel(Row, text, 11, Enum.Font.GothamMedium, fg, Enum.TextXAlignment.Center)
     Lbl.AutomaticSize = Enum.AutomaticSize.X
     Lbl.Size = UDim2.new(0, 0, 1, 0)
     Lbl.LayoutOrder = 2
-
     Btn.MouseEnter:Connect(function()
-        TweenService:Create(Btn, TweenInfo.new(0.15), {BackgroundTransparency = 0.15}):Play()
+        TweenService:Create(Btn, TweenInfo.new(0.15), {BackgroundColor3 = filled and bg or Colors.SwitchOff}):Play()
+        if filled then TweenService:Create(Btn, TweenInfo.new(0.15), {BackgroundTransparency = 0.15}):Play() end
     end)
     Btn.MouseLeave:Connect(function()
-        TweenService:Create(Btn, TweenInfo.new(0.15), {BackgroundTransparency = 0}):Play()
+        TweenService:Create(Btn, TweenInfo.new(0.15), {BackgroundColor3 = bg, BackgroundTransparency = 0}):Play()
     end)
     return Btn, Lbl
 end
 
+-- ═══════════ [ SIDEBAR ] ═══════════
+local NavButtons = {}
+do
+    local Sidebar = Instance.new("Frame", MainFrame)
+    Sidebar.Size = UDim2.new(0, SIDEBAR_W, 1, 0)
+    Sidebar.BackgroundColor3 = Colors.Sidebar
+    Sidebar.BorderSizePixel = 0
+
+    local Sep = Instance.new("Frame", MainFrame)
+    Sep.Size = UDim2.new(0, 1, 1, 0)
+    Sep.Position = UDim2.new(0, SIDEBAR_W, 0, 0)
+    Sep.BackgroundColor3 = Colors.Border
+    Sep.BorderSizePixel = 0
+
+    -- logo + nama
+    local Logo = Instance.new("Frame", Sidebar)
+    Logo.Size = UDim2.new(0, 34, 0, 34)
+    Logo.Position = UDim2.new(0, 14, 0, 14)
+    Logo.BackgroundColor3 = Colors.Accent
+    Logo.BorderSizePixel = 0
+    Instance.new("UICorner", Logo).CornerRadius = UDim.new(0, 9)
+    local LogoIc = MakeIcon(Logo, "egg", 18, Colors.OnAccent)
+    LogoIc.AnchorPoint = Vector2.new(0.5, 0.5)
+    LogoIc.Position = UDim2.new(0.5, 0, 0.5, 0)
+    local Title = NewLabel(Sidebar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
+    Title.Size = UDim2.new(0, 80, 0, 18)
+    Title.Position = UDim2.new(0, 56, 0, 15)
+    local Ver = NewLabel(Sidebar, "Steal An Egg · v49", 10, Enum.Font.Gotham, Colors.TextDim)
+    Ver.Size = UDim2.new(0, 92, 0, 14)
+    Ver.Position = UDim2.new(0, 56, 0, 33)
+    Ver.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local MainLbl = NewLabel(Sidebar, "Main", 11, Enum.Font.GothamMedium, Colors.TextDim)
+    MainLbl.Size = UDim2.new(0, 60, 0, 14)
+    MainLbl.Position = UDim2.new(0, 20, 0, 68)
+
+    local NavList = Instance.new("Frame", Sidebar)
+    NavList.Size = UDim2.new(1, -20, 0, 120)
+    NavList.Position = UDim2.new(0, 10, 0, 88)
+    NavList.BackgroundTransparency = 1
+    local NavLayout = Instance.new("UIListLayout", NavList)
+    NavLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    NavLayout.Padding = UDim.new(0, 4)
+
+    local function CreateNavButton(key, name, iconKey, order)
+        local Btn = Instance.new("TextButton")
+        Btn.Size = UDim2.new(1, 0, 0, 34)
+        Btn.BackgroundColor3 = Colors.Tile
+        Btn.BackgroundTransparency = 1
+        Btn.AutoButtonColor = false
+        Btn.Text = ""
+        Btn.LayoutOrder = order
+        Btn.Parent = NavList
+        Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 8)
+
+        local Bar = Instance.new("Frame", Btn)
+        Bar.Size = UDim2.new(0, 3, 0, 18)
+        Bar.Position = UDim2.new(0, -10, 0.5, -9)
+        Bar.BackgroundColor3 = Colors.Accent
+        Bar.BorderSizePixel = 0
+        Bar.Visible = false
+        Instance.new("UICorner", Bar).CornerRadius = UDim.new(1, 0)
+
+        local Ic = MakeIcon(Btn, iconKey, 16, Colors.TextDim)
+        Ic.Position = UDim2.new(0, 10, 0.5, -8)
+        local Txt = NewLabel(Btn, name, 13, Enum.Font.GothamMedium, Colors.TextDim)
+        Txt.Size = UDim2.new(1, -40, 1, 0)
+        Txt.Position = UDim2.new(0, 36, 0, 0)
+
+        -- titik hijau: penanda monitor aktif saat sedang di tab lain
+        local Badge = Instance.new("Frame", Btn)
+        Badge.Size = UDim2.new(0, 6, 0, 6)
+        Badge.Position = UDim2.new(1, -14, 0.5, -3)
+        Badge.BackgroundColor3 = Colors.Green
+        Badge.BorderSizePixel = 0
+        Badge.Visible = false
+        Instance.new("UICorner", Badge).CornerRadius = UDim.new(1, 0)
+
+        local active = false
+        Btn.MouseEnter:Connect(function() if not active then Txt.TextColor3 = Colors.Text end end)
+        Btn.MouseLeave:Connect(function() if not active then Txt.TextColor3 = Colors.TextDim end end)
+        local function SetActive(isActive)
+            active = isActive
+            Bar.Visible = isActive
+            TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = isActive and 0 or 1}):Play()
+            Txt.TextColor3 = isActive and Colors.Text or Colors.TextDim
+            SetIconColor(Ic, isActive and Colors.Accent or Colors.TextDim)
+        end
+        NavButtons[key] = { Btn = Btn, SetActive = SetActive, Badge = Badge }
+    end
+
+    CreateNavButton("monitor", "Monitor", "monitor", 1)
+    CreateNavButton("egg", "Egg", "backpack", 2)
+    CreateNavButton("server", "Server", "server", 3)
+
+    -- kartu akun di bawah
+    local FootSep = Instance.new("Frame", Sidebar)
+    FootSep.Size = UDim2.new(1, -28, 0, 1)
+    FootSep.Position = UDim2.new(0, 14, 1, -64)
+    FootSep.BackgroundColor3 = Colors.Border
+    FootSep.BorderSizePixel = 0
+
+    local Av = Instance.new("Frame", Sidebar)
+    Av.Size = UDim2.new(0, 32, 0, 32)
+    Av.Position = UDim2.new(0, 14, 1, -52)
+    Av.BackgroundColor3 = Colors.Tile
+    Av.BorderSizePixel = 0
+    Instance.new("UICorner", Av).CornerRadius = UDim.new(1, 0)
+    local AvIc = MakeIcon(Av, "user", 16, Colors.TextDim)
+    AvIc.AnchorPoint = Vector2.new(0.5, 0.5)
+    AvIc.Position = UDim2.new(0.5, 0, 0.5, 0)
+
+    local NameLbl = NewLabel(Sidebar, player.Name:sub(1, 2) .. "********", 12, Enum.Font.GothamBold, Colors.Text)
+    NameLbl.Size = UDim2.new(0, 92, 0, 16)
+    NameLbl.Position = UDim2.new(0, 54, 1, -52)
+    NameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    UI.SideStatus = NewLabel(Sidebar, "Idle", 11, Enum.Font.Gotham, Colors.TextDim)
+    UI.SideStatus.Size = UDim2.new(0, 92, 0, 14)
+    UI.SideStatus.Position = UDim2.new(0, 54, 1, -35)
+end
+
+-- ═══════════ [ HEADER KONTEN ] ═══════════
+do
+    local Header = Instance.new("Frame", MainFrame)
+    Header.Size = UDim2.new(1, -(SIDEBAR_W + 1), 0, 44)
+    Header.Position = UDim2.new(0, SIDEBAR_W + 1, 0, 0)
+    Header.BackgroundTransparency = 1
+
+    UI.PageTitle = NewLabel(Header, "Monitor", 17, Enum.Font.GothamBold, Colors.Text)
+    UI.PageTitle.Size = UDim2.new(0, 150, 1, 0)
+    UI.PageTitle.Position = UDim2.new(0, 14, 0, 0)
+
+    local Pill = Instance.new("Frame", Header)
+    Pill.Size = UDim2.new(0, 96, 0, 22)
+    Pill.Position = UDim2.new(1, -168, 0.5, -11)
+    Pill.BackgroundColor3 = Colors.GlassPanel
+    Pill.BorderSizePixel = 0
+    Instance.new("UICorner", Pill).CornerRadius = UDim.new(1, 0)
+    local PillStroke = Instance.new("UIStroke", Pill)
+    PillStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    PillStroke.Thickness = 1
+    PillStroke.Color = Colors.Border
+    UI.PillDot = Instance.new("Frame", Pill)
+    UI.PillDot.Size = UDim2.new(0, 6, 0, 6)
+    UI.PillDot.Position = UDim2.new(0, 10, 0.5, -3)
+    UI.PillDot.BackgroundColor3 = Colors.TextDim
+    UI.PillDot.BorderSizePixel = 0
+    Instance.new("UICorner", UI.PillDot).CornerRadius = UDim.new(1, 0)
+    UI.PillLbl = NewLabel(Pill, "Idle", 11, Enum.Font.GothamMedium, Colors.TextDim)
+    UI.PillLbl.Size = UDim2.new(1, -26, 1, 0)
+    UI.PillLbl.Position = UDim2.new(0, 22, 0, 0)
+
+    local CloseBtn = Instance.new("TextButton", Header)
+    CloseBtn.Size = UDim2.new(0, 26, 0, 26)
+    CloseBtn.Position = UDim2.new(1, -34, 0.5, -13)
+    CloseBtn.BackgroundTransparency = 1
+    CloseBtn.Text = ""
+    local CloseIcon = MakeIcon(CloseBtn, "close", 14, Colors.TextDim)
+    CloseIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    CloseIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+    CloseBtn.MouseEnter:Connect(function() SetIconColor(CloseIcon, Colors.Danger) end)
+    CloseBtn.MouseLeave:Connect(function() SetIconColor(CloseIcon, Colors.TextDim) end)
+    CloseBtn.MouseButton1Click:Connect(function()
+        _G.StealEgg_Hub_Active = false
+        ScreenGui:Destroy()
+    end)
+
+    UI.MinBtn = Instance.new("TextButton", Header)
+    UI.MinBtn.Size = UDim2.new(0, 26, 0, 26)
+    UI.MinBtn.Position = UDim2.new(1, -62, 0.5, -13)
+    UI.MinBtn.BackgroundTransparency = 1
+    UI.MinBtn.Text = ""
+    local MinIcon = MakeIcon(UI.MinBtn, "minus", 14, Colors.TextDim)
+    MinIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    MinIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+    UI.MinBtn.MouseEnter:Connect(function() SetIconColor(MinIcon, Colors.Text) end)
+    UI.MinBtn.MouseLeave:Connect(function() SetIconColor(MinIcon, Colors.TextDim) end)
+end
+
+local ContentArea = Instance.new("Frame", MainFrame)
+ContentArea.Size = UDim2.new(1, -(SIDEBAR_W + 25), 0, FRAME_H - 86)
+ContentArea.Position = UDim2.new(0, SIDEBAR_W + 13, 0, 46)
+ContentArea.BackgroundTransparency = 1
+
+-- ═══════════════════════════════════════════════════════
+-- ── TAB MONITOR (kartu: progres, target sniper | status, kontrol, egg)
+-- ═══════════════════════════════════════════════════════
+local MonitorTab = Instance.new("Frame", ContentArea)
+MonitorTab.Size = UDim2.new(1, 0, 1, 0)
+MonitorTab.BackgroundTransparency = 1
+
+local monitorToggle, webhookToggle
+do
+    local function MakeColumn(x, w)
+        local col = Instance.new("Frame", MonitorTab)
+        col.Size = UDim2.new(0, w, 1, 0)
+        col.Position = UDim2.new(0, x, 0, 0)
+        col.BackgroundTransparency = 1
+        local lay = Instance.new("UIListLayout", col)
+        lay.SortOrder = Enum.SortOrder.LayoutOrder
+        lay.Padding = UDim.new(0, 10)
+        return col
+    end
+    local Left = MakeColumn(0, 190)
+    local Right = MakeColumn(200, 205)
+
+    -- ── Progres (ring fase: Farming > Hop > Egg) ──
+    local _, gBody = W.Card(Left, "Progres", "target", 150, 1)
+    local RING_SIZE, RING_T = 92, 8
+    local RingHolder = Instance.new("Frame", gBody)
+    RingHolder.Size = UDim2.new(0, RING_SIZE, 0, RING_SIZE)
+    RingHolder.Position = UDim2.new(0.5, -RING_SIZE / 2, 0, 0)
+    RingHolder.BackgroundTransparency = 1
+
+    local Track = Instance.new("Frame", RingHolder)
+    Track.Size = UDim2.new(1, -RING_T * 2, 1, -RING_T * 2)
+    Track.Position = UDim2.new(0, RING_T, 0, RING_T)
+    Track.BackgroundTransparency = 1
+    Instance.new("UICorner", Track).CornerRadius = UDim.new(1, 0)
+    local TrackStroke = Instance.new("UIStroke", Track)
+    TrackStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    TrackStroke.Thickness = RING_T
+    TrackStroke.Color = Colors.Track
+
+    local function MakeHalf(isRight)
+        local Clip = Instance.new("Frame", RingHolder)
+        Clip.Size = UDim2.new(0.5, 0, 1, 0)
+        Clip.Position = isRight and UDim2.new(0.5, 0, 0, 0) or UDim2.new(0, 0, 0, 0)
+        Clip.BackgroundTransparency = 1
+        Clip.ClipsDescendants = true
+        local Circ = Instance.new("Frame", Clip)
+        Circ.Size = UDim2.new(2, -RING_T * 2, 1, -RING_T * 2)
+        Circ.Position = isRight and UDim2.new(-1, RING_T, 0, RING_T) or UDim2.new(0, RING_T, 0, RING_T)
+        Circ.BackgroundTransparency = 1
+        Instance.new("UICorner", Circ).CornerRadius = UDim.new(1, 0)
+        local St = Instance.new("UIStroke", Circ)
+        St.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        St.Thickness = RING_T
+        St.Color = Colors.Accent
+        local Gr = Instance.new("UIGradient", St)
+        Gr.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0),
+            NumberSequenceKeypoint.new(0.5, 0),
+            NumberSequenceKeypoint.new(0.501, 1),
+            NumberSequenceKeypoint.new(1, 1),
+        })
+        return Gr, St
+    end
+    local RightGrad, RightStroke = MakeHalf(true)
+    local LeftGrad, LeftStroke = MakeHalf(false)
+    UI.RingStrokes = { RightStroke, LeftStroke }
+    UI.SetRing = function(p)
+        local angle = math.clamp(p, 0, 1) * 360
+        RightGrad.Rotation = math.clamp(angle, 0, 180)
+        LeftGrad.Rotation = math.clamp(angle - 180, 0, 180) - 180
+    end
+    UI.SetRing(0)
+
+    UI.PercentLbl = NewLabel(RingHolder, "—", 19, Enum.Font.GothamBold, Colors.Text, Enum.TextXAlignment.Center)
+    UI.PercentLbl.Size = UDim2.new(1, 0, 0, 24)
+    UI.PercentLbl.Position = UDim2.new(0, 0, 0.5, -18)
+    UI.PercentLbl.ZIndex = 5
+    UI.SubLbl = NewLabel(RingHolder, "Idle", 10, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
+    UI.SubLbl.Size = UDim2.new(1, 0, 0, 14)
+    UI.SubLbl.Position = UDim2.new(0, 0, 0.5, 6)
+    UI.SubLbl.ZIndex = 5
+
+    UI.CaptionLbl = NewLabel(gBody, "Aktifkan monitor di kartu Kontrol", 11, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
+    UI.CaptionLbl.Size = UDim2.new(1, 0, 0, 16)
+    UI.CaptionLbl.Position = UDim2.new(0, 0, 0, 98)
+    UI.CaptionLbl.TextTruncate = Enum.TextTruncate.AtEnd
+
+    -- langkah: Farming > Hop > Egg
+    local StepsRow = W.Row(gBody, 22, 124)
+    StepsRow:FindFirstChildOfClass("UIListLayout").Padding = UDim.new(0, 4)
+    local StepNames = { "Farming", "Hop", "Egg" }
+    local StepIconKeys = { "egg", "hop", "egg" }
+    UI.StepPills = {}
+    for i, nm in ipairs(StepNames) do
+        local P = Instance.new("Frame")
+        P.Size = UDim2.new(1 / 3, -3, 1, 0)
+        P.BackgroundColor3 = Colors.Tile
+        P.LayoutOrder = i
+        P.Parent = StepsRow
+        Instance.new("UICorner", P).CornerRadius = UDim.new(0, 7)
+        local Row = Instance.new("Frame", P)
+        Row.Size = UDim2.new(1, 0, 1, 0)
+        Row.BackgroundTransparency = 1
+        local Lay = Instance.new("UIListLayout", Row)
+        Lay.FillDirection = Enum.FillDirection.Horizontal
+        Lay.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        Lay.VerticalAlignment = Enum.VerticalAlignment.Center
+        Lay.SortOrder = Enum.SortOrder.LayoutOrder
+        Lay.Padding = UDim.new(0, 4)
+        local Ic = MakeIcon(Row, StepIconKeys[i], 11, Colors.TextDim)
+        Ic.LayoutOrder = 1
+        local Ck = MakeIcon(Row, "check", 11, Colors.Green)
+        Ck.LayoutOrder = 1
+        Ck.Visible = false
+        local L = NewLabel(Row, nm, 10, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Center)
+        L.AutomaticSize = Enum.AutomaticSize.X
+        L.Size = UDim2.new(0, 0, 1, 0)
+        L.LayoutOrder = 2
+        UI.StepPills[i] = { Frame = P, Label = L, Icon = Ic, Check = Ck }
+    end
+
+    -- ── Target sniper ──
+    local _, tBody = W.Card(Left, "Target sniper", "scan", 66, 2)
+    local tRow = W.Row(tBody, 36, 0)
+    UI.TgtCount = W.Tile(tRow, 80, 1, "0", "Player target")
+    UI.HopVal = W.Tile(tRow, 80, 2, "#0", "Server hop")
+    local ResetBtn, ResetLbl = W.Button(tBody, "Reset & Scan Target", "scan", false)
+    ResetBtn.Size = UDim2.new(1, 0, 0, 26)
+    ResetBtn.Position = UDim2.new(0, 0, 0, 40)
+    UI.ResetLbl = ResetLbl
+    ResetBtn.MouseButton1Click:Connect(function()
+        local fresh = scanCurrentPlayers()
+        config.DetectedTargets = {}
+        config.OriginalTargets = {}
+        for _, n in ipairs(fresh) do
+            table.insert(config.DetectedTargets, n)
+            table.insert(config.OriginalTargets, n)
+        end
+        saveConfig()
+        print("🔄 [Target] Reset. Sekarang: " .. #config.DetectedTargets .. " player.")
+        StarterGui:SetCore("SendNotification", {Title = "Target Reset", Text = #config.DetectedTargets .. " player terscan ulang.", Duration = 3})
+    end)
+
+    -- ── Status ──
+    local _, sBody = W.Card(Right, "Status", "clock", 36, 1)
+    local sRow = W.Row(sBody, 36, 0)
+    UI.StSpeed = W.Tile(sRow, 56, 1, "0", "Speed")
+    UI.StEgg, UI.StEggCap = W.Tile(sRow, 56, 2, "—", "Egg")
+    UI.StPlace = W.Tile(sRow, 57, 3, "OFF", "Auto Place")
+
+    -- ── Kontrol (isi callback sama persis dengan versi sebelumnya) ──
+    local _, kBody = W.Card(Right, "Kontrol", "bolt", 54, 2)
+    local kLay = Instance.new("UIListLayout", kBody)
+    kLay.SortOrder = Enum.SortOrder.LayoutOrder
+    kLay.Padding = UDim.new(0, 2)
+
+    -- Toggle Monitor
+    monitorToggle = W.Switch(kBody, "Monitor Egg", "egg", 1, config.MonitorEnabled, function(state)
+        config.MonitorEnabled = state
+        is_monitoring = state
+
+        if state then
+            -- ⭐ NYALAIN AUTO PLACE (BigFroot + Nasi Rendang + Ajjans + Venyx)
+            setBigFrootAutoPlace(true)
+            _G.setNasiRendangAutoPlace(true)
+            setAjjansAutoPlace(true)
+            setVenyxAutoPlace(true)
+
+            if webhookToggle then webhookToggle.SetState(false) end
+            config.WebhookEnabled = false
+
+            local initial = scanCurrentPlayers()
+            config.OriginalTargets = {}
+            for _, n in ipairs(initial) do table.insert(config.OriginalTargets, n) end
+            config.DetectedTargets = {}
+            for _, n in ipairs(initial) do table.insert(config.DetectedTargets, n) end
+            print("📋 [Target] Snapshot awal: " .. #config.DetectedTargets .. " player.")
+
+            StarterGui:SetCore("SendNotification", {Title = "Monitor Egg ON", Text = "Auto Place (BigFroot, Nasi Rendang, Ajjans, Venyx) aktif.", Duration = 5})
+        else
+            -- ⭐ MATIIN AUTO PLACE (BigFroot + Nasi Rendang + Ajjans + Venyx)
+            setBigFrootAutoPlace(false)
+            _G.setNasiRendangAutoPlace(false)
+            setAjjansAutoPlace(false)
+            setVenyxAutoPlace(false)
+
+            StarterGui:SetCore("SendNotification", {Title = "Monitor Egg OFF", Text = "Monitor & Auto Place berhenti.", Duration = 3})
+        end
+        saveConfig()
+    end)
+
+    -- Toggle Webhook Manual
+    webhookToggle = W.Switch(kBody, "Webhook Manual", "send", 2, config.WebhookEnabled, function(state)
+        if is_monitoring then
+            webhookToggle.SetState(false)
+            StarterGui:SetCore("SendNotification", {Title = "Webhook Terkunci", Text = "Matikan Monitor dulu kalau mau pake webhook manual.", Duration = 4})
+            return
+        end
+
+        config.WebhookEnabled = state
+        saveConfig()
+        if state then
+            StarterGui:SetCore("SendNotification", {Title = "Webhook Manual Aktif", Text = "Monitor akan dikirim ke Discord.", Duration = 3})
+        end
+    end)
+
+    -- ── Egg map terakhir ──
+    local _, eBody = W.Card(Right, "Egg map terakhir", "egg", 40, 3)
+    UI.EggMapName = NewLabel(eBody, "Map terakhir", 11, Enum.Font.GothamMedium, Colors.Text)
+    UI.EggMapName.Size = UDim2.new(1, -60, 0, 16)
+    UI.EggMapName.TextTruncate = Enum.TextTruncate.AtEnd
+    UI.EggMapVal = NewLabel(eBody, "0 / " .. EGG_GOAL, 11, Enum.Font.GothamBold, Colors.Green, Enum.TextXAlignment.Right)
+    UI.EggMapVal.Size = UDim2.new(0, 60, 0, 16)
+    UI.EggMapVal.Position = UDim2.new(1, -60, 0, 0)
+    local eTrack = Instance.new("Frame", eBody)
+    eTrack.Size = UDim2.new(1, 0, 0, 6)
+    eTrack.Position = UDim2.new(0, 0, 0, 24)
+    eTrack.BackgroundColor3 = Colors.Track
+    eTrack.BorderSizePixel = 0
+    Instance.new("UICorner", eTrack).CornerRadius = UDim.new(1, 0)
+    UI.EggMapFill = Instance.new("Frame", eTrack)
+    UI.EggMapFill.Size = UDim2.new(0, 0, 1, 0)
+    UI.EggMapFill.BackgroundColor3 = Colors.Green
+    UI.EggMapFill.BorderSizePixel = 0
+    Instance.new("UICorner", UI.EggMapFill).CornerRadius = UDim.new(1, 0)
+end
+
+-- ── Footer: status (ditulis oleh LOOP MONITOR, nama variabel tetap) ──
+local StatusLbl
+do
+    local FooterBar = Instance.new("Frame", MainFrame)
+    FooterBar.Size = UDim2.new(1, -(SIDEBAR_W + 25), 0, 24)
+    FooterBar.Position = UDim2.new(0, SIDEBAR_W + 13, 1, -34)
+    FooterBar.BackgroundColor3 = Colors.GlassPanel
+    FooterBar.BorderSizePixel = 0
+    Instance.new("UICorner", FooterBar).CornerRadius = UDim.new(0, 8)
+    local FS = Instance.new("UIStroke", FooterBar)
+    FS.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    FS.Thickness = 1
+    FS.Color = Colors.Border
+
+    -- StatusLbl tetap ditulis oleh loop. Label ini disembunyikan, isinya DICERMINKAN
+    -- ke StatusDisplay lengkap dengan ikon sesuai kondisi.
+    StatusLbl = NewLabel(FooterBar, "Status: " .. (is_monitoring and "Monitor Egg ON" or "Idle"), 11, Enum.Font.GothamMedium, Colors.TextDim)
+    StatusLbl.Size = UDim2.new(1, -16, 1, 0)
+    StatusLbl.Position = UDim2.new(0, 8, 0, 0)
+    StatusLbl.Visible = false
+
+    local StatusIcons = {}
+    for _, k in ipairs({ "egg", "hourglass", "hop", "checkc" }) do
+        local ic = MakeIcon(FooterBar, k, 14, Colors.TextDim)
+        ic.Position = UDim2.new(0, 9, 0.5, -7)
+        ic.Visible = false
+        StatusIcons[k] = ic
+    end
+    local StatusDisplay = NewLabel(FooterBar, StatusLbl.Text, 11, Enum.Font.GothamBold, Colors.TextDim)
+    StatusDisplay.Size = UDim2.new(1, -34, 1, 0)
+    StatusDisplay.Position = UDim2.new(0, 28, 0, 0)
+    StatusDisplay.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local function SyncStatus()
+        local raw = StatusLbl.Text
+        local key, col = "egg", Colors.TextDim
+        if raw:find("MASIH ADA", 1, true) then key, col = "hop", Colors.Amber
+        elseif raw:find("HILANG", 1, true) then key, col = "checkc", Colors.Green
+        elseif raw:find("Nunggu", 1, true) then key, col = "hourglass", Colors.Accent
+        elseif raw:find("Egg ON", 1, true) then key, col = "egg", Colors.Green end
+        for k, ic in pairs(StatusIcons) do ic.Visible = (k == key) end
+        SetIconColor(StatusIcons[key], col)
+        StatusDisplay.Text = raw
+        StatusDisplay.TextColor3 = col
+    end
+    StatusLbl:GetPropertyChangedSignal("Text"):Connect(SyncStatus)
+    SyncStatus()
+end
+
+-- ═══════════════════════════════════════════════════════
+-- ── TAB EGG (isi tas + hotbar)
+-- ═══════════════════════════════════════════════════════
+local EggTab = Instance.new("Frame", ContentArea)
+EggTab.Size = UDim2.new(1, 0, 1, 0)
+EggTab.BackgroundTransparency = 1
+EggTab.Visible = false
+do
+    local EggCard = Instance.new("Frame", EggTab)
+    EggCard.Size = UDim2.new(1, 0, 0, 74)
+    EggCard.BackgroundColor3 = Colors.GlassPanel
+    EggCard.BorderSizePixel = 0
+    Instance.new("UICorner", EggCard).CornerRadius = UDim.new(0, 10)
+    local ES = Instance.new("UIStroke", EggCard)
+    ES.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    ES.Thickness = 1
+    ES.Color = Colors.Border
+
+    local IcBox = Instance.new("Frame", EggCard)
+    IcBox.Size = UDim2.new(0, 34, 0, 34)
+    IcBox.Position = UDim2.new(0, 12, 0, 10)
+    IcBox.BackgroundColor3 = Colors.ChipOn
+    IcBox.BorderSizePixel = 0
+    Instance.new("UICorner", IcBox).CornerRadius = UDim.new(0, 9)
+    local EggCardIcon = MakeIcon(IcBox, "backpack", 18, Colors.Accent)
+    EggCardIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    EggCardIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+
+    UI.EggTotal = NewLabel(EggCard, "0", 20, Enum.Font.GothamBold, Colors.Text)
+    UI.EggTotal.Size = UDim2.new(0, 120, 0, 22)
+    UI.EggTotal.Position = UDim2.new(0, 56, 0, 8)
+    local EggTotalCap = NewLabel(EggCard, "egg di tas + hotbar", 10, Enum.Font.Gotham, Colors.TextDim)
+    EggTotalCap.Size = UDim2.new(0, 160, 0, 12)
+    EggTotalCap.Position = UDim2.new(0, 56, 0, 30)
+
+    UI.RefreshBtn, UI.RefreshLbl = W.Button(EggCard, "Refresh", "refresh", false)
+    UI.RefreshBtn.Size = UDim2.new(0, 90, 0, 26)
+    UI.RefreshBtn.Position = UDim2.new(1, -102, 0, 12)
+
+    local EggBarBg = Instance.new("Frame", EggCard)
+    EggBarBg.Size = UDim2.new(1, -24, 0, 6)
+    EggBarBg.Position = UDim2.new(0, 12, 0, 50)
+    EggBarBg.BackgroundColor3 = Colors.Track
+    EggBarBg.BorderSizePixel = 0
+    Instance.new("UICorner", EggBarBg).CornerRadius = UDim.new(1, 0)
+    UI.EggBarFill = Instance.new("Frame", EggBarBg)
+    UI.EggBarFill.Size = UDim2.new(0, 0, 1, 0)
+    UI.EggBarFill.BackgroundColor3 = Colors.Green
+    UI.EggBarFill.BorderSizePixel = 0
+    Instance.new("UICorner", UI.EggBarFill).CornerRadius = UDim.new(1, 0)
+    UI.EggBarName = NewLabel(EggCard, "Egg map terakhir", 9, Enum.Font.Gotham, Colors.TextDim)
+    UI.EggBarName.Size = UDim2.new(0.6, 0, 0, 12)
+    UI.EggBarName.Position = UDim2.new(0, 12, 0, 58)
+    UI.EggBarName.TextTruncate = Enum.TextTruncate.AtEnd
+    UI.EggBarVal = NewLabel(EggCard, "0 / " .. EGG_GOAL, 9, Enum.Font.GothamMedium, Colors.TextDim, Enum.TextXAlignment.Right)
+    UI.EggBarVal.Size = UDim2.new(0.35, 0, 0, 12)
+    UI.EggBarVal.Position = UDim2.new(0.65, -12, 0, 58)
+
+    UI.EggList = Instance.new("ScrollingFrame", EggTab)
+    UI.EggList.Size = UDim2.new(1, 0, 1, -84)
+    UI.EggList.Position = UDim2.new(0, 0, 0, 84)
+    UI.EggList.BackgroundTransparency = 1
+    StyleScrollbar(UI.EggList)
+    local EggListLayout = Instance.new("UIListLayout", UI.EggList)
+    EggListLayout.Padding = UDim.new(0, 4)
+    EggListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+end
+
+-- ═══════════════════════════════════════════════════════
+-- ── TAB SERVER (Job ID: salin & join)
+-- ═══════════════════════════════════════════════════════
 local ServerTab = Instance.new("Frame", ContentArea)
 ServerTab.Size = UDim2.new(1, 0, 1, 0)
 ServerTab.BackgroundTransparency = 1
 ServerTab.Visible = false
-
--- Kartu: Job ID server ini + tombol salin
-local currentJobId = game.JobId
-
-local JobCard = Instance.new("Frame", ServerTab)
-JobCard.Size = UDim2.new(1, 0, 0, 48)
-JobCard.BackgroundColor3 = Colors.GlassPanel
-Instance.new("UICorner", JobCard).CornerRadius = UDim.new(0, 10)
-
-local JobCap = NewLabel(JobCard, "Job ID server ini", 10, Enum.Font.Gotham, Colors.TextDim)
-JobCap.Size = UDim2.new(1, -96, 0, 14)
-JobCap.Position = UDim2.new(0, 10, 0, 6)
-
-local JobValue = NewLabel(JobCard, currentJobId ~= "" and currentJobId or "Tidak tersedia", 10, Enum.Font.Code, Colors.Text)
-JobValue.Size = UDim2.new(1, -96, 0, 16)
-JobValue.Position = UDim2.new(0, 10, 0, 22)
-JobValue.TextTruncate = Enum.TextTruncate.AtEnd
-
-local CopyBtn, CopyLbl = CreateActionButton(JobCard, "Salin", "copy", false)
-CopyBtn.Size = UDim2.new(0, 70, 0, 30)
-CopyBtn.AnchorPoint = Vector2.new(1, 0.5)
-CopyBtn.Position = UDim2.new(1, -9, 0.5, 0)
-
-CopyBtn.MouseButton1Click:Connect(function()
-    if currentJobId == "" then
-        notify("Gagal Salin", "Job ID tidak tersedia di server ini.", 4)
-        return
-    end
-    print("Job ID: " .. currentJobId)
-    local clip = setclipboard or toclipboard
-    local ok = clip and pcall(clip, currentJobId)
-    if ok then
-        CopyLbl.Text = "Tersalin"
-        notify("Job ID Tersalin", currentJobId, 4)
-        task.delay(1.5, function()
-            if CopyLbl.Parent then CopyLbl.Text = "Salin" end
+do
+    local function notify(title, text, dur)
+        pcall(function()
+            StarterGui:SetCore("SendNotification", {Title = title, Text = tostring(text), Duration = dur or 4})
         end)
-    else
-        notify("Gagal Salin", "Executor tidak mendukung clipboard. Job ID ada di console.", 5)
-    end
-end)
-
--- Input Job ID + tombol join
-local JoinCap = NewLabel(ServerTab, "Join server dengan Job ID", 10, Enum.Font.Gotham, Colors.TextDim)
-JoinCap.Size = UDim2.new(1, 0, 0, 14)
-JoinCap.Position = UDim2.new(0, 2, 0, 58)
-
-local InputWrap = Instance.new("Frame", ServerTab)
-InputWrap.Size = UDim2.new(1, 0, 0, 34)
-InputWrap.Position = UDim2.new(0, 0, 0, 76)
-InputWrap.BackgroundColor3 = Colors.GlassPanel
-Instance.new("UICorner", InputWrap).CornerRadius = UDim.new(0, 10)
-local InputStroke = Instance.new("UIStroke", InputWrap)
-InputStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-InputStroke.Thickness = 1
-InputStroke.Color = Colors.Border
-
-local JobInput = Instance.new("TextBox", InputWrap)
-JobInput.Size = UDim2.new(1, -20, 1, 0)
-JobInput.Position = UDim2.new(0, 10, 0, 0)
-JobInput.BackgroundTransparency = 1
-JobInput.Font = Enum.Font.Code
-JobInput.TextSize = 11
-JobInput.TextColor3 = Colors.Text
-JobInput.TextXAlignment = Enum.TextXAlignment.Left
-JobInput.PlaceholderText = "Tempel Job ID di sini"
-JobInput.PlaceholderColor3 = Colors.TextDim
-JobInput.Text = ""
-JobInput.ClearTextOnFocus = false
-
-local JoinBtn, JoinLbl = CreateActionButton(ServerTab, "Join server", "login", true)
-JoinBtn.Size = UDim2.new(1, 0, 0, 34)
-JoinBtn.Position = UDim2.new(0, 0, 0, 118)
-
-local JoinStatus = NewLabel(ServerTab, "Masukkan Job ID lalu tekan Join.", 10, Enum.Font.Gotham, Colors.TextDim, Enum.TextXAlignment.Center)
-JoinStatus.Size = UDim2.new(1, 0, 0, 28)
-JoinStatus.Position = UDim2.new(0, 0, 0, 158)
-JoinStatus.TextWrapped = true
-JoinStatus.TextYAlignment = Enum.TextYAlignment.Top
-
-local isJoining = false
-
-local function setJoinStatus(text, color)
-    JoinStatus.Text = text
-    JoinStatus.TextColor3 = color or Colors.TextDim
-end
-
-local function resetJoinButton()
-    isJoining = false
-    JoinLbl.Text = "Join server"
-end
-
-local function isValidJobId(s)
-    return #s == 36 and s:match("^%x+%-%x+%-%x+%-%x+%-%x+$") ~= nil
-end
-
-local function doJoin()
-    if isJoining then return end
-
-    local id = (JobInput.Text:gsub("[%s\"']", ""))
-    if id == "" then
-        setJoinStatus("Job ID masih kosong.", Colors.Danger)
-        return
-    end
-    if not isValidJobId(id) then
-        setJoinStatus("Format Job ID tidak valid.", Colors.Danger)
-        return
-    end
-    if id == game.JobId then
-        setJoinStatus("Kamu sudah ada di server ini.", Colors.Amber)
-        return
     end
 
-    isJoining = true
-    JoinLbl.Text = "Menghubungkan..."
-    setJoinStatus("Mengirim permintaan teleport...", Colors.Accent)
-    notify("Menghubungkan ke Server", "Job ID: " .. id:sub(1, 8) .. "...", 4)
+    local Col = Instance.new("Frame", ServerTab)
+    Col.Size = UDim2.new(1, 0, 1, 0)
+    Col.BackgroundTransparency = 1
+    local ColLay = Instance.new("UIListLayout", Col)
+    ColLay.SortOrder = Enum.SortOrder.LayoutOrder
+    ColLay.Padding = UDim.new(0, 10)
 
-    -- Simpan state monitor & pastikan script jalan lagi setelah pindah server
-    saveConfig()
-    queueReExecute()
+    -- Kartu: Job ID server ini + tombol salin
+    local currentJobId = game.JobId
+    local _, jBody = W.Card(Col, "Server ini", "server", 40, 1)
+    local JobCap = NewLabel(jBody, "Job ID", 10, Enum.Font.Gotham, Colors.TextDim)
+    JobCap.Size = UDim2.new(1, -90, 0, 14)
+    local JobValue = NewLabel(jBody, currentJobId ~= "" and currentJobId or "Tidak tersedia", 11, Enum.Font.Code, Colors.Text)
+    JobValue.Size = UDim2.new(1, -90, 0, 18)
+    JobValue.Position = UDim2.new(0, 0, 0, 16)
+    JobValue.TextTruncate = Enum.TextTruncate.AtEnd
 
-    local ok, err = pcall(function()
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, id, player)
-    end)
-
-    if not ok then
-        resetJoinButton()
-        setJoinStatus("Gagal: " .. tostring(err), Colors.Danger)
-        notify("Gagal Join", tostring(err), 6)
-        return
-    end
-
-    task.delay(15, function()
-        if isJoining then
-            resetJoinButton()
-            setJoinStatus("Tidak ada respons. Coba lagi.", Colors.Amber)
+    local CopyBtn, CopyLbl = W.Button(jBody, "Salin", "copy", false)
+    CopyBtn.Size = UDim2.new(0, 80, 0, 28)
+    CopyBtn.AnchorPoint = Vector2.new(1, 0.5)
+    CopyBtn.Position = UDim2.new(1, 0, 0.5, 0)
+    CopyBtn.MouseButton1Click:Connect(function()
+        if currentJobId == "" then
+            notify("Gagal Salin", "Job ID tidak tersedia di server ini.", 4)
+            return
+        end
+        print("Job ID: " .. currentJobId)
+        local clip = setclipboard or toclipboard
+        local ok = clip and pcall(clip, currentJobId)
+        if ok then
+            CopyLbl.Text = "Tersalin"
+            notify("Job ID Tersalin", currentJobId, 4)
+            task.delay(1.5, function()
+                if CopyLbl.Parent then CopyLbl.Text = "Salin" end
+            end)
+        else
+            notify("Gagal Salin", "Executor tidak mendukung clipboard. Job ID ada di console.", 5)
         end
     end)
+
+    -- Kartu: join dengan Job ID
+    local _, nBody = W.Card(Col, "Join server", "login", 104, 2)
+    local InputWrap = Instance.new("Frame", nBody)
+    InputWrap.Size = UDim2.new(1, 0, 0, 32)
+    InputWrap.BackgroundColor3 = Colors.Tile
+    InputWrap.BorderSizePixel = 0
+    Instance.new("UICorner", InputWrap).CornerRadius = UDim.new(0, 8)
+    local InputStroke = Instance.new("UIStroke", InputWrap)
+    InputStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    InputStroke.Thickness = 1
+    InputStroke.Color = Colors.Border
+
+    local JobInput = Instance.new("TextBox", InputWrap)
+    JobInput.Size = UDim2.new(1, -20, 1, 0)
+    JobInput.Position = UDim2.new(0, 10, 0, 0)
+    JobInput.BackgroundTransparency = 1
+    JobInput.Font = Enum.Font.Code
+    JobInput.TextSize = 11
+    JobInput.TextColor3 = Colors.Text
+    JobInput.TextXAlignment = Enum.TextXAlignment.Left
+    JobInput.PlaceholderText = "Tempel Job ID di sini"
+    JobInput.PlaceholderColor3 = Colors.TextDim
+    JobInput.Text = ""
+    JobInput.ClearTextOnFocus = false
+
+    local JoinBtn, JoinLbl = W.Button(nBody, "Join server", "login", true)
+    JoinBtn.Size = UDim2.new(1, 0, 0, 32)
+    JoinBtn.Position = UDim2.new(0, 0, 0, 40)
+
+    local JoinStatus = NewLabel(nBody, "Masukkan Job ID lalu tekan Join.", 10, Enum.Font.Gotham, Colors.TextDim, Enum.TextXAlignment.Center)
+    JoinStatus.Size = UDim2.new(1, 0, 0, 26)
+    JoinStatus.Position = UDim2.new(0, 0, 0, 78)
+    JoinStatus.TextWrapped = true
+    JoinStatus.TextYAlignment = Enum.TextYAlignment.Top
+
+    local isJoining = false
+
+    local function setJoinStatus(text, color)
+        JoinStatus.Text = text
+        JoinStatus.TextColor3 = color or Colors.TextDim
+    end
+
+    local function resetJoinButton()
+        isJoining = false
+        JoinLbl.Text = "Join server"
+    end
+
+    local function isValidJobId(s)
+        return #s == 36 and s:match("^%x+%-%x+%-%x+%-%x+%-%x+$") ~= nil
+    end
+
+    local function doJoin()
+        if isJoining then return end
+
+        local id = (JobInput.Text:gsub("[%s\"']", ""))
+        if id == "" then
+            setJoinStatus("Job ID masih kosong.", Colors.Danger)
+            return
+        end
+        if not isValidJobId(id) then
+            setJoinStatus("Format Job ID tidak valid.", Colors.Danger)
+            return
+        end
+        if id == game.JobId then
+            setJoinStatus("Kamu sudah ada di server ini.", Colors.Amber)
+            return
+        end
+
+        isJoining = true
+        JoinLbl.Text = "Menghubungkan..."
+        setJoinStatus("Mengirim permintaan teleport...", Colors.Accent)
+        notify("Menghubungkan ke Server", "Job ID: " .. id:sub(1, 8) .. "...", 4)
+
+        -- Simpan state monitor & pastikan script jalan lagi setelah pindah server
+        saveConfig()
+        queueReExecute()
+
+        local ok, err = pcall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, id, player)
+        end)
+
+        if not ok then
+            resetJoinButton()
+            setJoinStatus("Gagal: " .. tostring(err), Colors.Danger)
+            notify("Gagal Join", tostring(err), 6)
+            return
+        end
+
+        task.delay(15, function()
+            if isJoining then
+                resetJoinButton()
+                setJoinStatus("Tidak ada respons. Coba lagi.", Colors.Amber)
+            end
+        end)
+    end
+
+    JoinBtn.MouseButton1Click:Connect(doJoin)
+
+    JobInput.Focused:Connect(function()
+        TweenService:Create(InputStroke, TweenInfo.new(0.15), {Color = Colors.Accent}):Play()
+    end)
+    JobInput.FocusLost:Connect(function(enterPressed)
+        TweenService:Create(InputStroke, TweenInfo.new(0.15), {Color = Colors.Border}):Play()
+        if enterPressed then doJoin() end
+    end)
+
+    -- Error teleport dari Roblox (server penuh, tidak ditemukan, dll.)
+    local teleportFailConn = TeleportService.TeleportInitFailed:Connect(function(plr, result, msg)
+        if plr ~= player then return end
+        resetJoinButton()
+        local reason = tostring(msg or result)
+        setJoinStatus("Gagal join: " .. reason, Colors.Danger)
+        notify("Gagal Join", reason, 6)
+    end)
+    ScreenGui.Destroying:Connect(function() teleportFailConn:Disconnect() end)
 end
-
-JoinBtn.MouseButton1Click:Connect(doJoin)
-
-JobInput.Focused:Connect(function()
-    TweenService:Create(InputStroke, TweenInfo.new(0.15), {Color = Colors.Accent}):Play()
-end)
-JobInput.FocusLost:Connect(function(enterPressed)
-    TweenService:Create(InputStroke, TweenInfo.new(0.15), {Color = Colors.Border}):Play()
-    if enterPressed then doJoin() end
-end)
-
--- Error teleport dari Roblox (server penuh, tidak ditemukan, dll.)
-local teleportFailConn = TeleportService.TeleportInitFailed:Connect(function(plr, result, msg)
-    if plr ~= player then return end
-    resetJoinButton()
-    local reason = tostring(msg or result)
-    setJoinStatus("Gagal join: " .. reason, Colors.Danger)
-    notify("Gagal Join", reason, 6)
-end)
-ScreenGui.Destroying:Connect(function() teleportFailConn:Disconnect() end)
 
 -- ── Navigasi tab ────────────────────────────────────────
-local TabPages = {
-    { btn = MonitorBtn, set = SetMonitorActive, page = MonitorTab },
-    { btn = EggBtn,     set = SetEggActive,     page = EggTab },
-    { btn = ServerBtn,  set = SetServerActive,  page = ServerTab },
-}
-
-local function SwitchTab(idx)
-    for i, t in ipairs(TabPages) do
-        t.set(i == idx)
-        t.page.Visible = (i == idx)
+do
+    local Pages = { monitor = MonitorTab, egg = EggTab, server = ServerTab }
+    local Titles = { monitor = "Monitor", egg = "Egg", server = "Server" }
+    UI.ShowTab = function(name)
+        for key, page in pairs(Pages) do
+            page.Visible = (key == name)
+            NavButtons[key].SetActive(key == name)
+        end
+        UI.PageTitle.Text = Titles[name] or name
     end
+    for key in pairs(Pages) do
+        NavButtons[key].Btn.MouseButton1Click:Connect(function() UI.ShowTab(key) end)
+    end
+    UI.ShowTab("monitor")
 end
-
-for i, t in ipairs(TabPages) do
-    t.btn.MouseButton1Click:Connect(function() SwitchTab(i) end)
-end
-SwitchTab(1)
 
 -- ── Tombol mengambang (tidak diubah) ────────────────────
-local FloatingBtn = Instance.new("ImageButton", ScreenGui)
-FloatingBtn.Size = UDim2.new(0, 50, 0, 50)
-FloatingBtn.Position = UDim2.new(0, 20, 0, 20)
-FloatingBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-FloatingBtn.Image = "rbxassetid://71161700474373"
-FloatingBtn.ZIndex = 100
-Instance.new("UICorner", FloatingBtn).CornerRadius = UDim.new(1, 0)
+do
+    local FloatingBtn = Instance.new("ImageButton", ScreenGui)
+    FloatingBtn.Size = UDim2.new(0, 50, 0, 50)
+    FloatingBtn.Position = UDim2.new(0, 20, 0, 20)
+    FloatingBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    FloatingBtn.Image = "rbxassetid://71161700474373"
+    FloatingBtn.ZIndex = 100
+    Instance.new("UICorner", FloatingBtn).CornerRadius = UDim.new(1, 0)
 
-local draggingFloating = false
-local dragStartPos = nil
-local startPos = nil
-local isDragging = false
+    local draggingFloating = false
+    local dragStartPos = nil
+    local startPos = nil
+    local isDragging = false
 
-FloatingBtn.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        draggingFloating = true; isDragging = false
-        dragStartPos = input.Position
-        startPos = FloatingBtn.Position
-        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then draggingFloating = false end end)
-    end
-end)
+    FloatingBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            draggingFloating = true; isDragging = false
+            dragStartPos = input.Position
+            startPos = FloatingBtn.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then draggingFloating = false end end)
+        end
+    end)
 
-UserInputService.InputChanged:Connect(function(input)
-    if draggingFloating and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - dragStartPos
-        if delta.Magnitude > 5 then isDragging = true end
-        FloatingBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-end)
+    UserInputService.InputChanged:Connect(function(input)
+        if draggingFloating and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStartPos
+            if delta.Magnitude > 5 then isDragging = true end
+            FloatingBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
 
-FloatingBtn.MouseButton1Click:Connect(function()
-    if isDragging then return end
-    MainFrame.Visible = not MainFrame.Visible
-end)
-MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
+    FloatingBtn.MouseButton1Click:Connect(function()
+        if isDragging then return end
+        MainFrame.Visible = not MainFrame.Visible
+    end)
+    UI.MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
+end
 
 -- ═══════════ [ PENYEGAR TAMPILAN (BACA-SAJA) ] ═══════════
 -- Fase ring: Farming (speed menuju 15M) > Hop server > Egg (menuju EGG_GOAL).
@@ -2122,8 +2318,8 @@ local ProgressValue = Instance.new("NumberValue")
 local idleMode = true
 local fixedText = false
 ProgressValue.Changed:Connect(function(p)
-    SetRing(p)
-    if not idleMode and not fixedText then PercentLbl.Text = math.floor(p * 100 + 0.0001) .. "%" end
+    UI.SetRing(p)
+    if not idleMode and not fixedText then UI.PercentLbl.Text = math.floor(p * 100 + 0.0001) .. "%" end
 end)
 local function SetProgress(p)
     TweenService:Create(ProgressValue, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Value = p}):Play()
@@ -2324,6 +2520,7 @@ local function ScanEggInventory()
     return list, total
 end
 
+
 local EggRows = {}
 local lastEggScan = -100
 local lastEggSig = ""
@@ -2337,25 +2534,30 @@ local function RefreshEggTab(force)
     local parts = {}
     for _, it in ipairs(list) do table.insert(parts, it.name .. ":" .. it.count .. (it.map and "m" or "")) end
     local sig = total .. "|" .. table.concat(parts, ",")
-    EggTotal.Text = tostring(total)
+    UI.EggTotal.Text = tostring(total)
     if sig == lastEggSig then return end
     lastEggSig = sig
 
     for _, r in ipairs(EggRows) do r:Destroy() end
     EggRows = {}
     if #list == 0 then
-        local Empty = NewLabel(EggList, "Belum ada egg di backpack", 11, Enum.Font.Gotham, Colors.TextDim, Enum.TextXAlignment.Center)
+        local Empty = NewLabel(UI.EggList, "Belum ada egg di tas", 11, Enum.Font.Gotham, Colors.TextDim, Enum.TextXAlignment.Center)
         Empty.Size = UDim2.new(1, -8, 0, 30)
         table.insert(EggRows, Empty)
         return
     end
     for i, it in ipairs(list) do
         local Row = Instance.new("Frame")
-        Row.Size = UDim2.new(1, -8, 0, 28)
+        Row.Size = UDim2.new(1, -8, 0, 30)
         Row.BackgroundColor3 = Colors.GlassPanel
+        Row.BorderSizePixel = 0
         Row.LayoutOrder = i
-        Row.Parent = EggList
+        Row.Parent = UI.EggList
         Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 8)
+        local RS = Instance.new("UIStroke", Row)
+        RS.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        RS.Thickness = 1
+        RS.Color = it.map and Colors.Accent or Colors.Border
         local Ic = MakeIcon(Row, "egg", 14, it.map and Colors.Amber or Colors.TextDim)
         Ic.Position = UDim2.new(0, 10, 0.5, -7)
         local Nm = NewLabel(Row, it.name, 11, Enum.Font.GothamMedium, Colors.Text)
@@ -2363,11 +2565,11 @@ local function RefreshEggTab(force)
         Nm.Position = UDim2.new(0, 32, 0, 0)
         Nm.TextTruncate = Enum.TextTruncate.AtEnd
         if it.map then
-            local Tag = NewLabel(Row, "Map terjauh", 9, Enum.Font.GothamMedium, Colors.Amber, Enum.TextXAlignment.Center)
+            local Tag = NewLabel(Row, "Map terakhir", 9, Enum.Font.GothamMedium, Colors.Amber, Enum.TextXAlignment.Center)
             Tag.BackgroundTransparency = 0
             Tag.BackgroundColor3 = Colors.AmberBg
-            Tag.Size = UDim2.new(0, 70, 0, 16)
-            Tag.Position = UDim2.new(1, -124, 0.5, -8)
+            Tag.Size = UDim2.new(0, 74, 0, 16)
+            Tag.Position = UDim2.new(1, -128, 0.5, -8)
             Instance.new("UICorner", Tag).CornerRadius = UDim.new(1, 0)
         end
         local Cnt = NewLabel(Row, "x" .. it.count, 12, Enum.Font.GothamBold, Colors.Text, Enum.TextXAlignment.Right)
@@ -2377,48 +2579,50 @@ local function RefreshEggTab(force)
     end
 end
 
-RefreshBtn.MouseButton1Click:Connect(function()
-    RefreshLbl.Text = "Memindai..."
+UI.RefreshBtn.MouseButton1Click:Connect(function()
+    UI.RefreshLbl.Text = "Memindai..."
     task.spawn(function()
         RefreshEggTab(true)
         task.wait(0.4)
-        RefreshLbl.Text = "Refresh"
+        UI.RefreshLbl.Text = "Refresh"
     end)
 end)
 
 local function ApplyView(v)
     idleMode = v.idle == true
     fixedText = v.ptxt ~= nil
-    RightStroke.Color = v.color
-    LeftStroke.Color = v.color
+    for _, st in ipairs(UI.RingStrokes) do st.Color = v.color end
     SetProgress(v.pct)
     if idleMode then
-        PercentLbl.Text = "—"
+        UI.PercentLbl.Text = "—"
     elseif fixedText then
-        PercentLbl.Text = v.ptxt
+        UI.PercentLbl.Text = v.ptxt
     elseif math.abs(ProgressValue.Value - v.pct) < 0.0005 then
-        PercentLbl.Text = math.floor(v.pct * 100 + 0.0001) .. "%"
+        UI.PercentLbl.Text = math.floor(v.pct * 100 + 0.0001) .. "%"
     end
-    SubLbl.Text = v.sub
-    SubLbl.TextColor3 = v.color
-    CaptionLbl.Text = v.caption
-    PillLbl.Text = v.pill
-    PillLbl.TextColor3 = v.pillColor
-    PillDot.BackgroundColor3 = v.pillColor
+    UI.SubLbl.Text = v.sub
+    UI.SubLbl.TextColor3 = v.color
+    UI.CaptionLbl.Text = v.caption
+    UI.PillLbl.Text = v.pill
+    UI.PillLbl.TextColor3 = v.pillColor
+    UI.PillDot.BackgroundColor3 = v.pillColor
+    UI.SideStatus.Text = v.pill
+    UI.SideStatus.TextColor3 = v.pillColor
+    NavButtons.monitor.Badge.Visible = is_monitoring and not MonitorTab.Visible
 
-    for i, pill in ipairs(StepPills) do
+    for i, pill in ipairs(UI.StepPills) do
         local done = (v.idx == 4 or v.idx > i)
         pill.Icon.Visible = not done
         pill.Check.Visible = done
         if done then
-            pill.Frame.BackgroundColor3 = Colors.GlassPanel
+            pill.Frame.BackgroundColor3 = Colors.Tile
             pill.Label.TextColor3 = Colors.Green
         elseif v.idx == i then
             pill.Frame.BackgroundColor3 = Colors.ChipOn
             pill.Label.TextColor3 = v.color
             SetIconColor(pill.Icon, v.color)
         else
-            pill.Frame.BackgroundColor3 = Colors.GlassPanel
+            pill.Frame.BackgroundColor3 = Colors.Tile
             pill.Label.TextColor3 = Colors.TextDim
             SetIconColor(pill.Icon, Colors.TextDim)
         end
@@ -2426,16 +2630,24 @@ local function ApplyView(v)
 
     local nTargets = #(config.DetectedTargets or {})
     local eggs = tonumber(lastEggCount) or 0
-    StatEgg.Val.Text = lastEggCount ~= nil and tostring(lastEggCount) or "—"
-    StatEgg.Cap.Text = lastMapName and ("Egg " .. tostring(lastMapName)) or "Egg"
-    StatHop.Val.Text = "#" .. tostring(config.HopCount or 0)
-    StatPlace.Val.Text = v.place and "ON" or "OFF"
-    StatPlace.Val.TextColor3 = v.place and Colors.Green or Colors.TextDim
-    ResetLbl.Text = "Reset & Scan Target  •  " .. nTargets .. " player"
+    local okS, _, _, spd = pcall(getMyData)
+    UI.StSpeed.Text = okS and formatNumber(tonumber(spd) or 0) or "—"
+    UI.StEgg.Text = lastEggCount ~= nil and tostring(lastEggCount) or "—"
+    UI.StEggCap.Text = lastMapName and ("Egg " .. tostring(lastMapName)) or "Egg"
+    UI.StPlace.Text = v.place and "ON" or "OFF"
+    UI.StPlace.TextColor3 = v.place and Colors.Green or Colors.TextDim
+    UI.TgtCount.Text = tostring(nTargets)
+    UI.HopVal.Text = "#" .. tostring(config.HopCount or 0)
+    UI.ResetLbl.Text = "Reset & Scan Target"
 
-    EggBarFill.Size = UDim2.new(math.clamp(eggs / EGG_GOAL, 0, 1), 0, 1, 0)
-    EggBarName.Text = lastMapName and lastMapName ~= "Unknown" and ("Egg " .. tostring(lastMapName) .. " (map terjauh)") or "Egg map terjauh"
-    EggBarVal.Text = eggs .. " / " .. EGG_GOAL
+    local mapTxt = (lastMapName and lastMapName ~= "Unknown") and tostring(lastMapName) or "Map terakhir"
+    local frac = math.clamp(eggs / EGG_GOAL, 0, 1)
+    UI.EggMapName.Text = mapTxt
+    UI.EggMapVal.Text = eggs .. " / " .. EGG_GOAL
+    UI.EggMapFill.Size = UDim2.new(frac, 0, 1, 0)
+    UI.EggBarFill.Size = UDim2.new(frac, 0, 1, 0)
+    UI.EggBarName.Text = "Egg " .. mapTxt .. " (map terakhir)"
+    UI.EggBarVal.Text = eggs .. " / " .. EGG_GOAL
 end
 
 task.spawn(function()
