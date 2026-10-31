@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (v37 - UI sidebar + kartu: Monitor / Auto Buy / Pengaturan)
+-- ✨ V-Ziir0 Hub: Break & Steal (v38 - save/load per akun + pengaturan tersimpan)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ SISTEM ANTI-DOUBLE
@@ -100,24 +100,109 @@ local prereqName = "Galaxy"
 local prereqId = 17
 local prereqPrice = 4 * 1e15
 
--- ⭐ FUNGSI SAVE/LOAD STATE
+-- ═══════════════════════════════════════════════════════
+-- ⭐ SAVE/LOAD STATE PER AKUN (v38)
+-- File:  workspace/VZiir0Hub/BreakSteal/<UserId>.json
+-- Tiap akun punya file sendiri (pakai UserId, bukan nama, karena
+-- nama bisa diganti). Isi: profil aktif + pengaturan.
+-- File lama "vziir0_state.txt" (dipakai bersama) sengaja diabaikan.
+-- ═══════════════════════════════════════════════════════
 local STATE_KEY = "VZiir0_SavedProfile"
+local STATE_VERSION = 1
+local STATE_ROOT = "VZiir0Hub"
+local STATE_DIR = STATE_ROOT .. "/BreakSteal"
+local ACCOUNT_ID = tostring(player.UserId)
+local canFS = (writefile and readfile and isfile) and true or false
+
+local function resolveStatePath()
+    -- pakai subfolder kalau executor dukung makefolder, kalau tidak pakai file datar
+    if makefolder and isfolder then
+        local ok = pcall(function()
+            if not isfolder(STATE_ROOT) then makefolder(STATE_ROOT) end
+            if not isfolder(STATE_DIR) then makefolder(STATE_DIR) end
+        end)
+        if ok and isfolder(STATE_DIR) then
+            return STATE_DIR .. "/" .. ACCOUNT_ID .. ".json"
+        end
+    end
+    return "VZiir0Hub_BreakSteal_" .. ACCOUNT_ID .. ".json"
+end
+local STATE_FILE = canFS and resolveStatePath() or nil
+
+local accountState = {
+    version = STATE_VERSION,
+    userId = player.UserId,
+    name = player.Name,
+    profile = nil,
+    settings = {},
+}
+
+local function readAccountState()
+    if not canFS then return end
+    local ok, data = pcall(function()
+        if not isfile(STATE_FILE) then return nil end
+        return HttpService:JSONDecode(readfile(STATE_FILE))
+    end)
+    if ok and type(data) == "table" then
+        -- jaga-jaga: hanya terima file milik akun ini
+        if data.userId == nil or tostring(data.userId) == ACCOUNT_ID then
+            if type(data.profile) == "string" and data.profile ~= "" and data.profile ~= "None" then
+                accountState.profile = data.profile
+            end
+            if type(data.settings) == "table" then accountState.settings = data.settings end
+        end
+    elseif not ok then
+        warn("⚠️ V-Ziir0: file state akun rusak, dibuat ulang")
+    end
+end
+
+local writeQueued = false
+local function writeAccountState()
+    accountState.name = player.Name
+    accountState.updatedAt = os.time()
+    if not canFS or writeQueued then return end
+    writeQueued = true
+    task.delay(0.5, function()   -- debounce: banyak perubahan = 1x tulis
+        writeQueued = false
+        pcall(function() writefile(STATE_FILE, HttpService:JSONEncode(accountState)) end)
+    end)
+end
+
+local function saveSetting(key, value)
+    accountState.settings[key] = value
+    writeAccountState()
+end
+local function getSetting(key, expectedType)
+    local v = accountState.settings[key]
+    if v ~= nil and (expectedType == nil or type(v) == expectedType) then return v end
+    return nil
+end
+
 local function saveState(profileName)
     _G[STATE_KEY] = profileName
-    if writefile then pcall(function() writefile("vziir0_state.txt", profileName) end) end
+    accountState.profile = profileName
+    writeAccountState()
 end
 local function loadState()
     if _G[STATE_KEY] and _G[STATE_KEY] ~= "" and _G[STATE_KEY] ~= "None" then return _G[STATE_KEY] end
-    if readfile and isfile and isfile("vziir0_state.txt") then
-        local ok, content = pcall(function() return readfile("vziir0_state.txt") end)
-        if ok and content and content ~= "" then return content end
-    end
-    return nil
+    return accountState.profile
 end
 local function clearState()
     _G[STATE_KEY] = nil
-    if writefile then pcall(function() writefile("vziir0_state.txt", "") end) end
+    accountState.profile = nil
+    writeAccountState()
 end
+
+-- muat state akun ini + terapkan pengaturan tersimpan
+readAccountState()
+IDLE_TIMEOUT     = getSetting("idleTimeout", "number")     or IDLE_TIMEOUT
+STUCK_TIMEOUT    = getSetting("stuckTimeout", "number")    or STUCK_TIMEOUT
+WEBHOOK_INTERVAL = getSetting("webhookInterval", "number") or WEBHOOK_INTERVAL
+do
+    local n = getSetting("notifEnabled", "boolean"); if n ~= nil then notifEnabled = n end
+    local j = getSetting("autoJump", "boolean");     if j ~= nil then isAutoJumpEnabled = j end
+end
+print("💾 V-Ziir0: state akun " .. player.Name .. " (" .. ACCOUNT_ID .. ") → " .. tostring(STATE_FILE))
 
 -- ⭐ AUTO-DETECT PICKAXE DARI GAME
 local function formatNumberAuto(num)
@@ -1785,13 +1870,14 @@ do
     local oLay = Instance.new("UIListLayout", oBody)
     oLay.SortOrder = Enum.SortOrder.LayoutOrder
     oLay.Padding = UDim.new(0, 2)
-    UI.AutoJump = W.Switch(oBody, "Auto jump", nil, "jump", 1, false, Colors.Tile)
+    UI.AutoJump = W.Switch(oBody, "Auto jump", nil, "jump", 1, isAutoJumpEnabled, Colors.Tile)
     UI.AutoRespawn = W.Switch(oBody, "Auto respawn", nil, "hourglass", 2, true, Colors.Tile)
 
     UI.AutoJump.SwitchBg.MouseButton1Click:Connect(function()
         local newState = not UI.AutoJump.GetState()
         UI.AutoJump.SetState(newState)
         isAutoJumpEnabled = newState
+        saveSetting("autoJump", newState)
     end)
     UI.AutoRespawn.SwitchBg.MouseButton1Click:Connect(function()
         -- kalau monitor aktif, saklar dikunci → tidak bisa dimatikan
@@ -1933,12 +2019,12 @@ do
     Hint("Ketuk profil aktif lagi untuk mematikan monitor", 4)
 
     Section("Timer", 5)
-    W.Stepper(Scroll, "Batas diam", "Detik sebelum respawn", "clock", 6, IDLE_TIMEOUT, 5, 120, 1, "s", function(v) IDLE_TIMEOUT = v end)
-    W.Stepper(Scroll, "Batas macet", "Detik sebelum lompat", "clock", 7, STUCK_TIMEOUT, 3, 60, 1, "s", function(v) STUCK_TIMEOUT = v end)
+    W.Stepper(Scroll, "Batas diam", "Detik sebelum respawn", "clock", 6, IDLE_TIMEOUT, 5, 120, 1, "s", function(v) IDLE_TIMEOUT = v; saveSetting("idleTimeout", v) end)
+    W.Stepper(Scroll, "Batas macet", "Detik sebelum lompat", "clock", 7, STUCK_TIMEOUT, 3, 60, 1, "s", function(v) STUCK_TIMEOUT = v; saveSetting("stuckTimeout", v) end)
 
     Section("Notifikasi", 8)
-    local notifToggle = W.Switch(Scroll, "Notifikasi di layar", "Pop-up status", "bell", 9, true)
-    W.Stepper(Scroll, "Interval webhook", "Jeda kirim ke Discord", "bolt", 10, WEBHOOK_INTERVAL, 5, 300, 5, "s", function(v) WEBHOOK_INTERVAL = v end)
+    local notifToggle = W.Switch(Scroll, "Notifikasi di layar", "Pop-up status", "bell", 9, notifEnabled)
+    W.Stepper(Scroll, "Interval webhook", "Jeda kirim ke Discord", "bolt", 10, WEBHOOK_INTERVAL, 5, 300, 5, "s", function(v) WEBHOOK_INTERVAL = v; saveSetting("webhookInterval", v) end)
 
     Section("Data", 11)
     local ResetBtn = Instance.new("TextButton", Scroll)
@@ -1965,6 +2051,7 @@ do
         local newState = not notifToggle.GetState()
         notifToggle.SetState(newState)
         notifEnabled = newState
+        saveSetting("notifEnabled", newState)
     end)
 
     -- ═════ BARIS PROFIL (terbaru di atas) ═════
