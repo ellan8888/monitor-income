@@ -1,10 +1,10 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg (v53 - anti AFK Gio)
+-- 🥚 V-Ziir0 Hub: Steal An Egg (v52 - mode mini hanya saat monitor aktif)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ TUNGGU GAME SIAP (penting saat dijalankan otomatis setelah teleport)
 if not game:IsLoaded() then game.Loaded:Wait() end
-print("🥚 V-Ziir0 Steal An Egg v53 dimuat")
+print("🥚 V-Ziir0 Steal An Egg v52 dimuat")
 
 -- ⭐ SISTEM ANTI-DOUBLE
 if _G.StealEgg_Hub_Active then
@@ -117,27 +117,6 @@ end
 loadConfig()
 config.DetectedTargets = config.DetectedTargets or {}
 config.OriginalTargets = config.OriginalTargets or {}
-
--- ═══════════ [ ANTI AFK ] ═══════════
--- ANTI AFK made by Muscle_legends2021 [Gio]
-do
-    local VirtualUser = game:GetService('VirtualUser')
-
-    game:GetService('Players').LocalPlayer.Idled:Connect(function()
-        if not _G.StealEgg_RunId == RUN_ID then return end   -- cegah dobel kalau script dijalankan ulang
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton2(Vector2.new())
-    end)
-
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "AntiAFK loaded!",
-            Text = "Made by Gio",
-            Button1 = "Thanks",
-            Duration = 5
-        })
-    end)
-end
 
 -- ═══════════ [ AUTO EXECUTE SETELAH TELEPORT ] ═══════════
 -- Hanya mendaftar SATU kali per sesi supaya tidak jalan dobel setelah teleport.
@@ -1753,7 +1732,7 @@ do
     local Title = NewLabel(Sidebar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
     Title.Size = UDim2.new(0, 80, 0, 18)
     Title.Position = UDim2.new(0, 56, 0, 15)
-    local Ver = NewLabel(Sidebar, "Steal An Egg · v53", 10, Enum.Font.Gotham, Colors.TextDim)
+    local Ver = NewLabel(Sidebar, "Steal An Egg · v52", 10, Enum.Font.Gotham, Colors.TextDim)
     Ver.Size = UDim2.new(0, 92, 0, 14)
     Ver.Position = UDim2.new(0, 56, 0, 33)
     Ver.TextTruncate = Enum.TextTruncate.AtEnd
