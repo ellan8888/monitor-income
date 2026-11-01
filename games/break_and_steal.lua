@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (v40 - target income/speed per kapak bisa diatur dari UI)
+-- ✨ V-Ziir0 Hub: Break & Steal (v41 - target kapak: MAX / nomor urut / nama, dari script atau UI)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ SISTEM ANTI-DOUBLE
@@ -42,8 +42,14 @@ if not httpFn then warn("❌ Nggak ada fungsi request!"); return end
 -- ⭐ MASTER CONFIG (EDIT DI SINI KALAU MAU GANTI INCOME/SPEED)
 -- ═══════════════════════════════════════════════════════
 local MASTER_CONFIG = {
+    -- Kunci yang bisa dipakai (prioritas dari atas):
+    --   ["Nama Pickaxe"] = {...}  → kapak dengan nama itu (paling diutamakan)
+    --   [21]             = {...}  → kapak nomor urut 21 di game
+    --   ["MAX"]          = {...}  → SELALU kapak terbaru, apa pun namanya
+    -- Angka: 1e9 = 1B, 1e12 = 1T, 1e15 = 1Qa  (2.5e12 = 2.5T, 500e9 = 500B)
+    -- Target yang diatur dari UI (Pengaturan > Target per kapak) mengalahkan semua ini.
     -- Format: ["Nama Pickaxe"] = { income = Angka, speed = Angka }
-    ["Haunted Pickaxe"] = { income = 5e12, speed = 2e12 },
+    ["MAX"] = { income = 5e12, speed = 5e12 },
     ["Enchanted Pickaxe"] = { income = 2e12, speed = 1e12 },  -- 2T Income, 1T Speed
     ["Celestial Pickaxe"] = { income = 1e12, speed = 500e9 }, -- 1T Income, 500B Speed
     
@@ -280,9 +286,20 @@ do
         end)
     end
 
-    -- target yang DIATUR (file/script) untuk nama kapak; nil kalau belum ada
-    TargetStore.get = function(name)
-        return TargetStore.data[name] or MASTER_CONFIG[name]
+    -- target yang DIATUR untuk kapak di PICKAXE_DB[idx] → target, sumber
+    -- sumber: "ui" | "name" | "id" | "max" ; nil kalau belum ada
+    local function valid(t) return type(t) == "table" and tonumber(t.income) and tonumber(t.speed) and t or nil end
+    TargetStore.getFor = function(idx)
+        local pk = PICKAXE_DB[idx]
+        if not pk then return nil end
+        if valid(TargetStore.data[pk.name]) then return TargetStore.data[pk.name], "ui" end
+        if valid(MASTER_CONFIG[pk.name]) then return MASTER_CONFIG[pk.name], "name" end
+        if valid(MASTER_CONFIG[pk.id]) then return MASTER_CONFIG[pk.id], "id" end
+        if idx == #PICKAXE_DB then
+            local m = valid(MASTER_CONFIG["MAX"]) or valid(MASTER_CONFIG["max"])
+            if m then return m, "max" end
+        end
+        return nil
     end
 
     TargetStore.set = function(name, income, speed)
@@ -313,13 +330,11 @@ end
 
 -- target untuk kapak di PICKAXE_DB[idx] → income, speed, belumDiatur, namaAcuan
 local function resolveTarget(idx)
-    local pk = PICKAXE_DB[idx]
-    local t = pk and TargetStore.get(pk.name)
-    if t then return t.income, t.speed, false, nil end
+    local t = TargetStore.getFor(idx)
+    if t then return tonumber(t.income), tonumber(t.speed), false, nil end
     for j = (idx or 1) - 1, 1, -1 do
-        local ref = PICKAXE_DB[j]
-        local t2 = ref and TargetStore.get(ref.name)
-        if t2 then return t2.income, t2.speed, true, ref.name end
+        local t2 = TargetStore.getFor(j)
+        if t2 then return tonumber(t2.income), tonumber(t2.speed), true, PICKAXE_DB[j].name end
     end
     return DEFAULT_INCOME, DEFAULT_SPEED, true, nil
 end
@@ -1620,7 +1635,7 @@ do
     local Title = NewLabel(Sidebar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
     Title.Size = UDim2.new(0, 80, 0, 18)
     Title.Position = UDim2.new(0, 56, 0, 15)
-    local Ver = NewLabel(Sidebar, "v40", 11, Enum.Font.Gotham, Colors.TextDim)
+    local Ver = NewLabel(Sidebar, "v41", 11, Enum.Font.Gotham, Colors.TextDim)
     Ver.Size = UDim2.new(0, 80, 0, 14)
     Ver.Position = UDim2.new(0, 56, 0, 33)
 
@@ -2276,14 +2291,19 @@ do
         local SpdBox = MakeBox(-74, "Speed")
 
         local function refreshRow()
-            local own = TargetStore.data[pkName]
-            local t = TargetStore.get(pkName)
+            local t, src = TargetStore.getFor(cfg.pickaxeIdx)
             if t then
                 IncBox.Text = formatNumberAuto(t.income)
                 SpdBox.Text = formatNumberAuto(t.speed)
                 IncBox.PlaceholderText, SpdBox.PlaceholderText = "", ""
-                D.Text = own and "Diatur dari UI" or "Bawaan script"
-                D.TextColor3 = own and Colors.Green or Colors.TextDim
+                local srcText = ({
+                    ui = "Diatur dari UI",
+                    name = "Script: nama kapak",
+                    id = "Script: nomor urut #" .. tostring(cfg.pickaxeId),
+                    max = "Script: MAX (kapak terbaru)",
+                })[src] or "Bawaan script"
+                D.Text = srcText
+                D.TextColor3 = (src == "ui") and Colors.Green or Colors.TextDim
                 RowStroke.Color = Colors.Border
             else
                 local inc, spd, _, refName = resolveTarget(cfg.pickaxeIdx)
