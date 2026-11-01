@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (v38 - save/load per akun + pengaturan tersimpan)
+-- ✨ V-Ziir0 Hub: Break & Steal (v40 - target income/speed per kapak bisa diatur dari UI)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ SISTEM ANTI-DOUBLE
@@ -239,82 +239,135 @@ local function LoadPickaxeDB()
 end
 LoadPickaxeDB()
 
--- ⭐ SINKRONISASI PROFIL (AUTO-CLONE DENGAN MASTER CONFIG)
+-- ═══════════════════════════════════════════════════════
+-- ⭐ TARGET PER KAPAK (v40) — bisa diatur dari tab Pengaturan, tanpa edit script
+-- Urutan prioritas:  targets.json (diatur dari UI)  >  MASTER_CONFIG (di script)
+--                    >  target kapak tertinggi yang sudah diatur (untuk kapak baru)
+--                    >  DEFAULT_INCOME / DEFAULT_SPEED
+-- File: workspace/VZiir0Hub/BreakSteal/targets.json  (SATU file untuk SEMUA akun)
+-- ═══════════════════════════════════════════════════════
+local TargetStore = { data = {}, file = nil }
+do
+    if canFS then
+        if STATE_FILE and STATE_FILE:find("/", 1, true) then
+            TargetStore.file = STATE_FILE:gsub("[^/]+$", "targets.json")
+        else
+            TargetStore.file = "VZiir0Hub_BreakSteal_targets.json"
+        end
+    end
+
+    TargetStore.load = function()
+        if not TargetStore.file then return end
+        local ok, data = pcall(function()
+            if not isfile(TargetStore.file) then return nil end
+            return HttpService:JSONDecode(readfile(TargetStore.file))
+        end)
+        if ok and type(data) == "table" and type(data.targets) == "table" then
+            local clean = {}
+            for name, t in pairs(data.targets) do
+                if type(t) == "table" and tonumber(t.income) and tonumber(t.speed) then
+                    clean[tostring(name)] = { income = tonumber(t.income), speed = tonumber(t.speed) }
+                end
+            end
+            TargetStore.data = clean
+        end
+    end
+
+    TargetStore.save = function()
+        if not TargetStore.file then return false end
+        return pcall(function()
+            writefile(TargetStore.file, HttpService:JSONEncode({ version = 1, updatedAt = os.time(), targets = TargetStore.data }))
+        end)
+    end
+
+    -- target yang DIATUR (file/script) untuk nama kapak; nil kalau belum ada
+    TargetStore.get = function(name)
+        return TargetStore.data[name] or MASTER_CONFIG[name]
+    end
+
+    TargetStore.set = function(name, income, speed)
+        if income and speed then
+            TargetStore.data[name] = { income = income, speed = speed }
+        else
+            TargetStore.data[name] = nil      -- kosong = kembali ke bawaan script
+        end
+        return TargetStore.save()
+    end
+
+    TargetStore.load()
+end
+
+-- "2T", "1.5t", "500B", "2000000000000" → angka; nil kalau tidak valid
+local function parseAmount(text)
+    text = tostring(text or ""):gsub("[%s,%$]", "")
+    if text == "" then return nil end
+    local num, suf = text:match("^([%d%.]+)(%a*)$")
+    num = tonumber(num)
+    if not num then return nil end
+    local mult = ({ [""] = 1, k = 1e3, m = 1e6, b = 1e9, t = 1e12, qa = 1e15, qi = 1e18 })[suf:lower()]
+    if not mult then return nil end
+    local v = num * mult
+    if v <= 0 then return nil end
+    return v
+end
+
+-- target untuk kapak di PICKAXE_DB[idx] → income, speed, belumDiatur, namaAcuan
+local function resolveTarget(idx)
+    local pk = PICKAXE_DB[idx]
+    local t = pk and TargetStore.get(pk.name)
+    if t then return t.income, t.speed, false, nil end
+    for j = (idx or 1) - 1, 1, -1 do
+        local ref = PICKAXE_DB[j]
+        local t2 = ref and TargetStore.get(ref.name)
+        if t2 then return t2.income, t2.speed, true, ref.name end
+    end
+    return DEFAULT_INCOME, DEFAULT_SPEED, true, nil
+end
+
+-- ⭐ SINKRONISASI PROFIL (AUTO-CLONE DENGAN TARGET PER KAPAK)
 local CONFIG_DB = {}
 
 local function SyncConfigDB()
     CONFIG_DB = {} 
     if #PICKAXE_DB == 0 then return end
 
-    local targetIdx20, targetIdx18
-    for i, pk in ipairs(PICKAXE_DB) do
-        if pk.id == 20 then targetIdx20 = i end
-        if pk.id == 18 then targetIdx18 = i end
+    local GALAXY_ID = 17
+    local function idxOfId(id)
+        for i, pk in ipairs(PICKAXE_DB) do if pk.id == id then return i end end
+        return nil
+    end
+    local galaxy = PICKAXE_DB[idxOfId(GALAXY_ID) or GALAXY_ID]
+
+    -- key = identitas tetap profil (dipakai simpan/muat), nama boleh berubah
+    local function addProfile(key, idx, nameFn, isNew)
+        local pk = PICKAXE_DB[idx]
+        if not pk then return end
+        local inc, spd, missing, refName = resolveTarget(idx)
+        table.insert(CONFIG_DB, {
+            key = key, nameFn = nameFn, name = nameFn(inc),
+            amount = inc, targetSpeed = spd,
+            targetMissing = missing, targetRef = refName,
+            pickaxeIdx = idx, pickaxeId = pk.id, pickaxeName = pk.name, pickaxePrice = pk.priceRaw,
+            prereqId = galaxy and galaxy.id, prereqName = galaxy and galaxy.name, prereqPrice = galaxy and galaxy.priceRaw,
+            isNew = isNew,
+        })
     end
 
-    -- 1. SETUP PROFIL STATIS (Income 1T tetap Celestial)
-    local pk18 = PICKAXE_DB[targetIdx18] or PICKAXE_DB[18]
-    local cfg18 = MASTER_CONFIG[pk18.name] or { income = 1e12, speed = 500e9 }
-    
-    table.insert(CONFIG_DB, {
-        name = "Akun Income 1T", 
-        amount = cfg18.income, targetSpeed = cfg18.speed,
-        pickaxeId = pk18.id, pickaxeName = pk18.name, pickaxePrice = pk18.priceRaw,
-        prereqId = PICKAXE_DB[17].id, prereqName = PICKAXE_DB[17].name, prereqPrice = PICKAXE_DB[17].priceRaw
-    })
+    -- 1. PROFIL STATIS: Akun Income (kapak #18)
+    addProfile("income1t", idxOfId(18) or 18, function(inc) return "Akun Income " .. formatNumberAuto(inc) end, false)
 
-    -- 2. PROSES ANTREAN MAX ACC & CLONE-NYA
+    -- 2. MAX ACC + CLONE untuk kapak baru (> #20)
     local latestIndex = #PICKAXE_DB
-    local GALAXY_ID = 17
-
     if latestIndex > 20 then
-        local newPickaxesCount = latestIndex - 20
-        
-        for i = 1, newPickaxesCount do
-            local cloneIdx = 20 + (i - 1) 
-            local pkClone = PICKAXE_DB[cloneIdx]
-            local cfgClone = MASTER_CONFIG[pkClone.name] or { income = DEFAULT_INCOME, speed = DEFAULT_SPEED }
-            
-            table.insert(CONFIG_DB, {
-                name = "Income " .. formatNumberAuto(cfgClone.income), 
-                amount = cfgClone.income, 
-                targetSpeed = cfgClone.speed, 
-                pickaxeId = pkClone.id, pickaxeName = pkClone.name, pickaxePrice = pkClone.priceRaw, 
-                prereqId = PICKAXE_DB[GALAXY_ID].id, 
-                prereqName = PICKAXE_DB[GALAXY_ID].name, 
-                prereqPrice = PICKAXE_DB[GALAXY_ID].priceRaw
-            })
+        for i = 1, latestIndex - 20 do
+            local cloneIdx = 20 + (i - 1)
+            addProfile("pk:" .. tostring(PICKAXE_DB[cloneIdx].id), cloneIdx,
+                function(inc) return "Income " .. formatNumberAuto(inc) end, true)
         end
-
-        local newPk = PICKAXE_DB[latestIndex]
-        local cfgNew = MASTER_CONFIG[newPk.name] or { income = DEFAULT_INCOME, speed = DEFAULT_SPEED }
-        
-        table.insert(CONFIG_DB, {
-            name = "Max Account (Terbaru)", 
-            amount = cfgNew.income, 
-            targetSpeed = cfgNew.speed, 
-            pickaxeId = newPk.id, pickaxeName = newPk.name, pickaxePrice = newPk.priceRaw, 
-            prereqId = PICKAXE_DB[GALAXY_ID].id, 
-            prereqName = PICKAXE_DB[GALAXY_ID].name, 
-            prereqPrice = PICKAXE_DB[GALAXY_ID].priceRaw
-        })
-
-        -- ⭐ tandai profil hasil deteksi pickaxe baru (untuk label "baru" & filter)
-        for idx = 2, #CONFIG_DB do
-            CONFIG_DB[idx].isNew = true
-        end
+        addProfile("max", latestIndex, function() return "Max Account (Terbaru)" end, true)
     else
-        local maxPk = PICKAXE_DB[targetIdx20]
-        local cfgMax = MASTER_CONFIG[maxPk.name] or { income = DEFAULT_INCOME, speed = DEFAULT_SPEED }
-        
-        table.insert(CONFIG_DB, {
-            name = "Max Account (Income " .. formatNumberAuto(cfgMax.income) .. ")", 
-            amount = cfgMax.income, targetSpeed = cfgMax.speed,
-            pickaxeId = maxPk.id, pickaxeName = maxPk.name, pickaxePrice = maxPk.priceRaw,
-            prereqId = PICKAXE_DB[GALAXY_ID].id, 
-            prereqName = PICKAXE_DB[GALAXY_ID].name, 
-            prereqPrice = PICKAXE_DB[GALAXY_ID].priceRaw
-        })
+        addProfile("max", idxOfId(20) or 20,
+            function(inc) return "Max Account (Income " .. formatNumberAuto(inc) .. ")" end, false)
     end
 end
 SyncConfigDB()
@@ -1531,6 +1584,10 @@ W.Profile = function(parent, cfg, order)
         SetState = function(state) isOn = state; paint() end,
         GetState = function() return isOn end,
         SwitchBg = Btn,
+        SetInfo = function(name, amount, speed)
+            NameLbl.Text = name
+            Right.Text = formatNumber(amount) .. " · " .. formatNumber(speed)
+        end,
     }
 end
 
@@ -1563,7 +1620,7 @@ do
     local Title = NewLabel(Sidebar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
     Title.Size = UDim2.new(0, 80, 0, 18)
     Title.Position = UDim2.new(0, 56, 0, 15)
-    local Ver = NewLabel(Sidebar, "v37", 11, Enum.Font.Gotham, Colors.TextDim)
+    local Ver = NewLabel(Sidebar, "v40", 11, Enum.Font.Gotham, Colors.TextDim)
     Ver.Size = UDim2.new(0, 80, 0, 14)
     Ver.Position = UDim2.new(0, 56, 0, 33)
 
@@ -2018,15 +2075,15 @@ do
 
     Hint("Ketuk profil aktif lagi untuk mematikan monitor", 4)
 
-    Section("Timer", 5)
-    W.Stepper(Scroll, "Batas diam", "Detik sebelum respawn", "clock", 6, IDLE_TIMEOUT, 5, 120, 1, "s", function(v) IDLE_TIMEOUT = v; saveSetting("idleTimeout", v) end)
-    W.Stepper(Scroll, "Batas macet", "Detik sebelum lompat", "clock", 7, STUCK_TIMEOUT, 3, 60, 1, "s", function(v) STUCK_TIMEOUT = v; saveSetting("stuckTimeout", v) end)
+    Section("Timer", 20)
+    W.Stepper(Scroll, "Batas diam", "Detik sebelum respawn", "clock", 21, IDLE_TIMEOUT, 5, 120, 1, "s", function(v) IDLE_TIMEOUT = v; saveSetting("idleTimeout", v) end)
+    W.Stepper(Scroll, "Batas macet", "Detik sebelum lompat", "clock", 22, STUCK_TIMEOUT, 3, 60, 1, "s", function(v) STUCK_TIMEOUT = v; saveSetting("stuckTimeout", v) end)
 
-    Section("Notifikasi", 8)
-    local notifToggle = W.Switch(Scroll, "Notifikasi di layar", "Pop-up status", "bell", 9, notifEnabled)
-    W.Stepper(Scroll, "Interval webhook", "Jeda kirim ke Discord", "bolt", 10, WEBHOOK_INTERVAL, 5, 300, 5, "s", function(v) WEBHOOK_INTERVAL = v; saveSetting("webhookInterval", v) end)
+    Section("Notifikasi", 23)
+    local notifToggle = W.Switch(Scroll, "Notifikasi di layar", "Pop-up status", "bell", 24, notifEnabled)
+    W.Stepper(Scroll, "Interval webhook", "Jeda kirim ke Discord", "bolt", 25, WEBHOOK_INTERVAL, 5, 300, 5, "s", function(v) WEBHOOK_INTERVAL = v; saveSetting("webhookInterval", v) end)
 
-    Section("Data", 11)
+    Section("Data", 26)
     local ResetBtn = Instance.new("TextButton", Scroll)
     ResetBtn.Size = UDim2.new(1, 0, 0, 32)
     ResetBtn.BackgroundColor3 = Colors.GlassPanel
@@ -2035,7 +2092,7 @@ do
     ResetBtn.Font = Enum.Font.GothamMedium
     ResetBtn.TextSize = 12
     ResetBtn.TextColor3 = Colors.Danger
-    ResetBtn.LayoutOrder = 12
+    ResetBtn.LayoutOrder = 27
     Instance.new("UICorner", ResetBtn).CornerRadius = UDim.new(0, 10)
     local RS = Instance.new("UIStroke", ResetBtn)
     RS.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
@@ -2045,7 +2102,7 @@ do
     local Spacer = Instance.new("Frame", Scroll)
     Spacer.Size = UDim2.new(1, 0, 0, 4)
     Spacer.BackgroundTransparency = 1
-    Spacer.LayoutOrder = 13
+    Spacer.LayoutOrder = 28
 
     notifToggle.SwitchBg.MouseButton1Click:Connect(function()
         local newState = not notifToggle.GetState()
@@ -2089,7 +2146,7 @@ do
                 else
                     showNotif("🎯 TARGET DIPILIH", "Target: " .. cfg.name, 5)
                 end
-                saveState(cfg.name)
+                saveState(cfg.key or cfg.name)
             else
                 is_monitoring = false
                 is_farm_stopped = false
@@ -2114,6 +2171,153 @@ do
                 callbackFn(true)
             end
         end)
+    end
+
+    -- ═════ TARGET PER KAPAK (v40) ═════
+    Section("Target per kapak", 5)
+    Hint("Isi 2T / 1.5T / 500B lalu Enter. Kosongkan = bawaan script.", 6)
+    local TargetBox = Instance.new("Frame", Scroll)
+    TargetBox.Size = UDim2.new(1, -6, 0, 0)
+    TargetBox.AutomaticSize = Enum.AutomaticSize.Y
+    TargetBox.BackgroundTransparency = 1
+    TargetBox.LayoutOrder = 7
+    local TBLayout = Instance.new("UIListLayout", TargetBox)
+    TBLayout.Padding = UDim.new(0, 4)
+    TBLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+    -- terapkan target terbaru ke semua profil yang memakai kapak ini
+    local function applyTargetsFor(pickaxeName)
+        for i, cfg in ipairs(CONFIG_DB) do
+            if cfg.pickaxeName == pickaxeName then
+                local inc, spd, missing, refName = resolveTarget(cfg.pickaxeIdx)
+                local oldName = cfg.name
+                cfg.amount, cfg.targetSpeed = inc, spd
+                cfg.targetMissing, cfg.targetRef = missing, refName
+                cfg.name = cfg.nameFn and cfg.nameFn(inc) or cfg.name
+                local tog = monitorToggles[i]
+                if tog and tog.SetInfo then tog.SetInfo(cfg.name, inc, spd) end
+                -- profil ini sedang aktif → nyalakan ulang dengan target baru
+                if tog and tog.GetState() and activeProfileName == oldName and toggleCallbacks[i] then
+                    local wasStopped = is_farm_stopped
+                    toggleCallbacks[i](true)
+                    if wasStopped then
+                        local okM, m = pcall(function() return parseNumber((getMyData())) end)
+                        if okM and m and m < inc then
+                            startAutoFarm()
+                            showNotif("🔄 TARGET DIUBAH", "Target naik ke " .. formatNumber(inc) .. ", lanjut farming", 5)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- satu baris per kapak yang dipakai profil (kapak tertinggi di atas)
+    local seenPk, pkList = {}, {}
+    for _, cfg in ipairs(CONFIG_DB) do
+        if not seenPk[cfg.pickaxeName] then
+            seenPk[cfg.pickaxeName] = true
+            table.insert(pkList, cfg)
+        end
+    end
+    table.sort(pkList, function(x, y) return (x.pickaxeIdx or 0) > (y.pickaxeIdx or 0) end)
+
+    for order, cfg in ipairs(pkList) do
+        local pkName = cfg.pickaxeName
+        local Row = Instance.new("Frame", TargetBox)
+        Row.Size = UDim2.new(1, 0, 0, 44)
+        Row.BackgroundColor3 = Colors.GlassPanel
+        Row.LayoutOrder = order
+        Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 10)
+        local RowStroke = Instance.new("UIStroke", Row)
+        RowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        RowStroke.Thickness = 1
+        RowStroke.Color = Colors.Border
+
+        local Ic = MakeIcon(Row, "pickaxe", 16, Colors.Accent)
+        Ic.Position = UDim2.new(0, 10, 0.5, -8)
+        local T = NewLabel(Row, pkName, 12, Enum.Font.GothamMedium, Colors.Text)
+        T.Size = UDim2.new(1, -184, 0, 16)
+        T.Position = UDim2.new(0, 34, 0, 6)
+        T.TextTruncate = Enum.TextTruncate.AtEnd
+        local D = NewLabel(Row, "", 10, Enum.Font.Gotham, Colors.TextDim)
+        D.Size = UDim2.new(1, -184, 0, 14)
+        D.Position = UDim2.new(0, 34, 0, 23)
+        D.TextTruncate = Enum.TextTruncate.AtEnd
+
+        local function MakeBox(xOff, caption)
+            local Wrap = Instance.new("Frame", Row)
+            Wrap.Size = UDim2.new(0, 64, 0, 30)
+            Wrap.Position = UDim2.new(1, xOff, 0.5, -15)
+            Wrap.BackgroundColor3 = Colors.Tile
+            Instance.new("UICorner", Wrap).CornerRadius = UDim.new(0, 7)
+            local St = Instance.new("UIStroke", Wrap)
+            St.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+            St.Thickness = 1
+            St.Color = Colors.Border
+            local Cap = NewLabel(Wrap, caption, 8, Enum.Font.Gotham, Colors.TextDim, Enum.TextXAlignment.Center)
+            Cap.Size = UDim2.new(1, 0, 0, 10)
+            Cap.Position = UDim2.new(0, 0, 0, 2)
+            local Box = Instance.new("TextBox", Wrap)
+            Box.Size = UDim2.new(1, -8, 0, 16)
+            Box.Position = UDim2.new(0, 4, 0, 12)
+            Box.BackgroundTransparency = 1
+            Box.Font = Enum.Font.GothamBold
+            Box.TextSize = 12
+            Box.TextColor3 = Colors.Accent
+            Box.PlaceholderColor3 = Colors.TextDim
+            Box.ClearTextOnFocus = false
+            Box.Text = ""
+            Box.Focused:Connect(function() St.Color = Colors.Accent end)
+            Box.FocusLost:Connect(function() St.Color = Colors.Border end)
+            return Box
+        end
+        local IncBox = MakeBox(-142, "Income")
+        local SpdBox = MakeBox(-74, "Speed")
+
+        local function refreshRow()
+            local own = TargetStore.data[pkName]
+            local t = TargetStore.get(pkName)
+            if t then
+                IncBox.Text = formatNumberAuto(t.income)
+                SpdBox.Text = formatNumberAuto(t.speed)
+                IncBox.PlaceholderText, SpdBox.PlaceholderText = "", ""
+                D.Text = own and "Diatur dari UI" or "Bawaan script"
+                D.TextColor3 = own and Colors.Green or Colors.TextDim
+                RowStroke.Color = Colors.Border
+            else
+                local inc, spd, _, refName = resolveTarget(cfg.pickaxeIdx)
+                IncBox.Text, SpdBox.Text = "", ""
+                IncBox.PlaceholderText = formatNumberAuto(inc)
+                SpdBox.PlaceholderText = formatNumberAuto(spd)
+                D.Text = "Belum diatur · sementara ikut " .. (refName or "default")
+                D.TextColor3 = Colors.Amber
+                RowStroke.Color = Colors.Amber
+            end
+        end
+        refreshRow()
+
+        local function commit()
+            local incTxt, spdTxt = IncBox.Text, SpdBox.Text
+            if incTxt:gsub("%s", "") == "" and spdTxt:gsub("%s", "") == "" then
+                TargetStore.set(pkName, nil, nil)
+                showNotif("🎯 TARGET DIRESET", pkName .. " kembali ke bawaan script", 4)
+            else
+                local inc, spd = parseAmount(incTxt), parseAmount(spdTxt)
+                if not inc or not spd then
+                    showNotif("❌ FORMAT SALAH", "Contoh benar: 2T, 1.5T, 500B", 4)
+                    refreshRow()
+                    return
+                end
+                local okSave = TargetStore.set(pkName, inc, spd)
+                showNotif("🎯 TARGET DISIMPAN", pkName .. ": " .. formatNumber(inc) .. " · " .. formatNumber(spd)
+                    .. (okSave and "" or " (file tidak bisa ditulis, hanya sesi ini)"), 4)
+            end
+            applyTargetsFor(pkName)
+            refreshRow()
+        end
+        IncBox.FocusLost:Connect(function(enter) if enter then commit() end end)
+        SpdBox.FocusLost:Connect(function(enter) if enter then commit() end end)
     end
 
     -- ═════ FILTER ═════
@@ -2557,13 +2761,63 @@ end
 task.spawn(function()
     task.wait(3)
     if not isCurrent() then return end
+
+    -- 1) Pulihkan target Auto Buy akun ini (dari tab Auto Buy)
+    local savedBuy = getSetting("autoBuyTarget", "table")
+    if savedBuy and savedBuy.id then
+        local found
+        for _, pk in ipairs(PICKAXE_DB) do
+            if pk.id == savedBuy.id then found = pk break end
+        end
+        if found then
+            targetPickaxeName = found.name
+            targetPickaxeId = found.id
+            targetBuyPrice = found.priceRaw   -- harga terbaru dari game
+            autoBuyEnabled = true
+            hasCheckedOwnership = false
+            hasCheckedTarget = false
+            lastTargetProbe = 0
+            buyStatus = "Siap beli (ID: " .. found.id .. ")"
+            showNotif("🛒 AUTO BUY DIMUAT", "Lanjut menunggu uang untuk " .. found.name, 5)
+        else
+            saveSetting("autoBuyTarget", nil)   -- kapak sudah tidak ada di game
+        end
+    end
+
+    -- 2) Pulihkan profil monitor (profil bisa menimpa target Auto Buy)
     local savedProfile = loadState()
     if savedProfile and savedProfile ~= "None" then
         for i, cfg in ipairs(CONFIG_DB) do
-            if cfg.name == savedProfile and monitorToggles[i] then
+            if (cfg.key == savedProfile or cfg.name == savedProfile) and monitorToggles[i] then
                 monitorToggles[i].SetState(true)
                 if toggleCallbacks[i] then toggleCallbacks[i](true) end
                 break
+            end
+        end
+    end
+
+    -- info: kapak baru yang targetnya belum diatur
+    for _, cfg in ipairs(CONFIG_DB) do
+        if cfg.targetMissing then
+            showNotif("🎯 TARGET BELUM DIATUR", cfg.pickaxeName .. " sementara ikut " .. tostring(cfg.targetRef or "default")
+                .. ". Atur di Pengaturan > Target per kapak", 8)
+            break
+        end
+    end
+
+    -- 3) Pantau perubahan Auto Buy → simpan otomatis per akun
+    --    (pilih kapak, beli sukses, sudah dimiliki, gagal, tombol stop)
+    local function buyKey() return autoBuyEnabled and tostring(targetPickaxeId) or "off" end
+    local lastBuyKey = buyKey()
+    while isCurrent() do
+        task.wait(1)
+        local k = buyKey()
+        if k ~= lastBuyKey then
+            lastBuyKey = k
+            if autoBuyEnabled then
+                saveSetting("autoBuyTarget", { id = targetPickaxeId, name = targetPickaxeName })
+            else
+                saveSetting("autoBuyTarget", nil)
             end
         end
     end

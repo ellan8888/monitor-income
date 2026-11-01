@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg (v51 - tombol bulat juga buka mode mini)
+-- 🥚 V-Ziir0 Hub: Steal An Egg (v52 - mode mini hanya saat monitor aktif)
 -- v41: Auto Place All di hub Ajjans ikut nyala (< 15M) / mati (>= 15M).
 -- v42: Auto place di hub Venyx juga ikut nyala/mati (lewat objek library Venyx).
 -- v43: Venyx: kalau :Set tidak mempan → klik toggle langsung; log status di F9.
@@ -7,6 +7,7 @@
 -- v46: Map terakhir & daftar egg otomatis dari ReplicatedStorage.Data.Areas.Configs;
 --      egg dihitung dari Tool di Backpack + karakter (nama Tool = nama pet).
 -- v47: fungsi Ajjans/Venyx/EggData dibungkus do...end (batas 200 local Luau).
+-- v52: mode mini hanya tampil saat Monitor Egg aktif; monitor mati → mode mini hilang.
 -- v51: tombol bulat: tutup panel → mode mini muncul; buka lagi → mode mini hilang.
 -- v50: notifikasi custom (kanan bawah) + mode mini saat panel di-minimize.
 -- v49: UI baru: sidebar (Monitor/Egg/Server), header, kartu 2 kolom, footer status.
@@ -18,7 +19,7 @@
 
 -- ⭐ TUNGGU GAME SIAP (penting saat dijalankan otomatis setelah teleport)
 if not game:IsLoaded() then game.Loaded:Wait() end
-print("🥚 V-Ziir0 Steal An Egg v51 dimuat")
+print("🥚 V-Ziir0 Steal An Egg v52 dimuat")
 
 -- ⭐ SISTEM ANTI-DOUBLE
 if _G.StealEgg_Hub_Active then
@@ -1746,7 +1747,7 @@ do
     local Title = NewLabel(Sidebar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
     Title.Size = UDim2.new(0, 80, 0, 18)
     Title.Position = UDim2.new(0, 56, 0, 15)
-    local Ver = NewLabel(Sidebar, "Steal An Egg · v51", 10, Enum.Font.Gotham, Colors.TextDim)
+    local Ver = NewLabel(Sidebar, "Steal An Egg · v52", 10, Enum.Font.Gotham, Colors.TextDim)
     Ver.Size = UDim2.new(0, 92, 0, 14)
     Ver.Position = UDim2.new(0, 56, 0, 33)
     Ver.TextTruncate = Enum.TextTruncate.AtEnd
@@ -2566,8 +2567,16 @@ do
     Expand.MouseLeave:Connect(function() Expand.BackgroundColor3 = Colors.Tile end)
     UI.Mini = Mini
 
+    -- mode mini hanya tampil kalau Monitor Egg sedang aktif (ada progres)
+    UI.MiniWanted = false
+    local function HideMain()
+        MainFrame.Visible = false
+        UI.MiniWanted = true
+        Mini.Visible = is_monitoring == true
+    end
     local function ShowMain(show)
         MainFrame.Visible = show
+        UI.MiniWanted = false
         Mini.Visible = false
     end
     Expand.MouseButton1Click:Connect(function() ShowMain(true) end)
@@ -2575,17 +2584,15 @@ do
     FloatingBtn.MouseButton1Click:Connect(function()
         if isDragging then return end
         if MainFrame.Visible then
-            -- tutup panel utama → tampilkan mode mini
-            MainFrame.Visible = false
-            Mini.Visible = true
+            -- tutup panel utama → mode mini (kalau monitor aktif)
+            HideMain()
         else
             ShowMain(true)
         end
     end)
     -- minimize → panel utama disembunyikan, mode mini muncul
     UI.MinBtn.MouseButton1Click:Connect(function()
-        MainFrame.Visible = false
-        Mini.Visible = true
+        HideMain()
     end)
 end
 
@@ -2927,7 +2934,10 @@ local function ApplyView(v)
     UI.EggBarName.Text = "Egg " .. mapTxt .. " (map terakhir)"
     UI.EggBarVal.Text = eggs .. " / " .. EGG_GOAL
 
-    -- mode mini
+    -- mode mini: muncul/hilang mengikuti status monitor saat panel utama tertutup
+    if UI.Mini then
+        UI.Mini.Visible = UI.MiniWanted == true and is_monitoring == true and not MainFrame.Visible
+    end
     if UI.Mini and UI.Mini.Visible then
         for _, st in ipairs(UI.MiniStrokes) do st.Color = v.color end
         UI.SetMiniRing(v.pct)
