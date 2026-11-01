@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg (v53 - anti AFK)
+-- 🥚 V-Ziir0 Hub: Steal An Egg (v53 - anti AFK Gio)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ TUNGGU GAME SIAP (penting saat dijalankan otomatis setelah teleport)
@@ -117,33 +117,25 @@ end
 loadConfig()
 config.DetectedTargets = config.DetectedTargets or {}
 config.OriginalTargets = config.OriginalTargets or {}
-if config.AntiAfk == nil then config.AntiAfk = true end   -- default ON
 
--- ═══════════ [ ANTI AFK (Versi Aman) ] ═══════════
--- Jangan sentuh player.Idled. Kirim input berkala via VirtualUser.
+-- ═══════════ [ ANTI AFK ] ═══════════
+-- ANTI AFK made by Muscle_legends2021 [Gio]
 do
-    local VirtualUser = game:GetService("VirtualUser")
-    local UserInputService = game:GetService("UserInputService")
-    
-    task.spawn(function()
-        while _G.StealEgg_RunId == RUN_ID and _G.StealEgg_Hub_Active do
-            task.wait(60) -- setiap 60 detik, sebelum timer idle 2 menit
-            if not _G.StealEgg_Hub_Active then break end
-            
-            pcall(function()
-                -- Kirim klik kiri virtual (lebih umum dari klik kanan)
-                VirtualUser:CaptureController()
-                VirtualUser:ClickButton1(Vector2.new(0, 0))
-            end)
-            
-            -- Opsional: gerakkan mouse sedikit biar terlihat natural
-            pcall(function()
-                if UserInputService.MouseEnabled then
-                    local mouse = game.Players.LocalPlayer:GetMouse()
-                    -- Jangan gerakin mouse beneran, cukup trigger input kecil
-                end
-            end)
-        end
+    local VirtualUser = game:GetService('VirtualUser')
+
+    game:GetService('Players').LocalPlayer.Idled:Connect(function()
+        if not _G.StealEgg_RunId == RUN_ID then return end   -- cegah dobel kalau script dijalankan ulang
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end)
+
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "AntiAFK loaded!",
+            Text = "Made by Gio",
+            Button1 = "Thanks",
+            Duration = 5
+        })
     end)
 end
 
@@ -2070,7 +2062,7 @@ do
     UI.StPlace = W.Tile(sRow, 57, 3, "OFF", "Auto Place")
 
     -- ── Kontrol (isi callback sama persis dengan versi sebelumnya) ──
-    local _, kBody = W.Card(Right, "Kontrol", "bolt", 82, 2)
+    local _, kBody = W.Card(Right, "Kontrol", "bolt", 54, 2)
     local kLay = Instance.new("UIListLayout", kBody)
     kLay.SortOrder = Enum.SortOrder.LayoutOrder
     kLay.Padding = UDim.new(0, 2)
@@ -2123,14 +2115,6 @@ do
         if state then
             showNotif("Webhook Manual Aktif", "Monitor akan dikirim ke Discord.", 3)
         end
-    end)
-
-    -- Anti AFK (tersimpan di config)
-    W.Switch(kBody, "Anti AFK", "user", 3, config.AntiAfk, function(state)
-        config.AntiAfk = state
-        saveConfig()
-        showNotif(state and "Anti AFK ON" or "Anti AFK OFF",
-            state and "Kick idle 20 menit dicegah." or "Roblox bisa kick setelah 20 menit diam.", 3)
     end)
 
     -- ── Egg map terakhir ──
