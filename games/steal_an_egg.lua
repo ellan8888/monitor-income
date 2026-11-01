@@ -1,25 +1,10 @@
 -- ═══════════════════════════════════════════════════════
--- 🥚 V-Ziir0 Hub: Steal An Egg (v52 - mode mini hanya saat monitor aktif)
--- v41: Auto Place All di hub Ajjans ikut nyala (< 15M) / mati (>= 15M).
--- v42: Auto place di hub Venyx juga ikut nyala/mati (lewat objek library Venyx).
--- v43: Venyx: kalau :Set tidak mempan → klik toggle langsung; log status di F9.
--- v45: Egg di hotbar dibaca dari UI hotbar (BackpackGui), bukan cuma grid tas.
--- v46: Map terakhir & daftar egg otomatis dari ReplicatedStorage.Data.Areas.Configs;
---      egg dihitung dari Tool di Backpack + karakter (nama Tool = nama pet).
--- v47: fungsi Ajjans/Venyx/EggData dibungkus do...end (batas 200 local Luau).
--- v52: mode mini hanya tampil saat Monitor Egg aktif; monitor mati → mode mini hilang.
--- v51: tombol bulat: tutup panel → mode mini muncul; buka lagi → mode mini hilang.
--- v50: notifikasi custom (kanan bawah) + mode mini saat panel di-minimize.
--- v49: UI baru: sidebar (Monitor/Egg/Server), header, kartu 2 kolom, footer status.
--- v48: egg = grid tas ("<Map> Egg", UI) + hotbar (Tool "<Pet> Egg"); pet tidak dihitung.
--- v40: setelah server hop, script otomatis jalan lagi dan MELANJUTKAN monitor
---      beserta daftar target dari server sebelumnya (config dibaca dari file).
--- UI sama dengan v39. Logika sniper/auto place/webhook tidak diubah.
+-- 🥚 V-Ziir0 Hub: Steal An Egg (v53 - anti AFK)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ TUNGGU GAME SIAP (penting saat dijalankan otomatis setelah teleport)
 if not game:IsLoaded() then game.Loaded:Wait() end
-print("🥚 V-Ziir0 Steal An Egg v52 dimuat")
+print("🥚 V-Ziir0 Steal An Egg v53 dimuat")
 
 -- ⭐ SISTEM ANTI-DOUBLE
 if _G.StealEgg_Hub_Active then
@@ -132,6 +117,32 @@ end
 loadConfig()
 config.DetectedTargets = config.DetectedTargets or {}
 config.OriginalTargets = config.OriginalTargets or {}
+if config.AntiAfk == nil then config.AntiAfk = true end   -- default ON
+
+-- ═══════════ [ ANTI AFK ] ═══════════
+-- Roblox memicu event Idled setelah ±2 menit tanpa input; saat itu dikirim
+-- klik virtual sehingga timer idle di-reset (tidak kena kick 20 menit).
+do
+    local okVU, VirtualUser = pcall(function() return game:GetService("VirtualUser") end)
+    player.Idled:Connect(function()
+        if _G.StealEgg_RunId ~= RUN_ID or not config.AntiAfk then return end
+        local ok = false
+        if okVU and VirtualUser then
+            ok = pcall(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+        end
+        if not ok then
+            pcall(function()
+                local vim = game:GetService("VirtualInputManager")
+                vim:SendKeyEvent(true, Enum.KeyCode.Unknown, false, game)
+                vim:SendKeyEvent(false, Enum.KeyCode.Unknown, false, game)
+            end)
+        end
+        print("🛡️ [Anti-AFK] Idle terdeteksi, input virtual dikirim (" .. os.date("%H:%M:%S") .. ")")
+    end)
+end
 
 -- ═══════════ [ AUTO EXECUTE SETELAH TELEPORT ] ═══════════
 -- Hanya mendaftar SATU kali per sesi supaya tidak jalan dobel setelah teleport.
@@ -1747,7 +1758,7 @@ do
     local Title = NewLabel(Sidebar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
     Title.Size = UDim2.new(0, 80, 0, 18)
     Title.Position = UDim2.new(0, 56, 0, 15)
-    local Ver = NewLabel(Sidebar, "Steal An Egg · v52", 10, Enum.Font.Gotham, Colors.TextDim)
+    local Ver = NewLabel(Sidebar, "Steal An Egg · v53", 10, Enum.Font.Gotham, Colors.TextDim)
     Ver.Size = UDim2.new(0, 92, 0, 14)
     Ver.Position = UDim2.new(0, 56, 0, 33)
     Ver.TextTruncate = Enum.TextTruncate.AtEnd
@@ -2056,7 +2067,7 @@ do
     UI.StPlace = W.Tile(sRow, 57, 3, "OFF", "Auto Place")
 
     -- ── Kontrol (isi callback sama persis dengan versi sebelumnya) ──
-    local _, kBody = W.Card(Right, "Kontrol", "bolt", 54, 2)
+    local _, kBody = W.Card(Right, "Kontrol", "bolt", 82, 2)
     local kLay = Instance.new("UIListLayout", kBody)
     kLay.SortOrder = Enum.SortOrder.LayoutOrder
     kLay.Padding = UDim.new(0, 2)
@@ -2109,6 +2120,14 @@ do
         if state then
             showNotif("Webhook Manual Aktif", "Monitor akan dikirim ke Discord.", 3)
         end
+    end)
+
+    -- Anti AFK (tersimpan di config)
+    W.Switch(kBody, "Anti AFK", "user", 3, config.AntiAfk, function(state)
+        config.AntiAfk = state
+        saveConfig()
+        showNotif(state and "Anti AFK ON" or "Anti AFK OFF",
+            state and "Kick idle 20 menit dicegah." or "Roblox bisa kick setelah 20 menit diam.", 3)
     end)
 
     -- ── Egg map terakhir ──

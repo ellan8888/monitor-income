@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (v41 - target kapak: MAX / nomor urut / nama, dari script atau UI)
+-- ✨ V-Ziir0 Hub: Break & Steal (v42 - anti AFK)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ SISTEM ANTI-DOUBLE
@@ -209,6 +209,37 @@ do
     local j = getSetting("autoJump", "boolean");     if j ~= nil then isAutoJumpEnabled = j end
 end
 print("💾 V-Ziir0: state akun " .. player.Name .. " (" .. ACCOUNT_ID .. ") → " .. tostring(STATE_FILE))
+
+-- ═══════════════════════════════════════════════════════
+-- ⭐ ANTI AFK (v42) — mencegah kick "idle 20 menit" dari Roblox
+-- Roblox memicu event Idled setelah ±2 menit tanpa input; saat itu
+-- dikirim klik virtual sehingga timer idle di-reset. Default ON,
+-- bisa dimatikan di Pengaturan (tersimpan per akun).
+-- ═══════════════════════════════════════════════════════
+local antiAfkEnabled = getSetting("antiAfk", "boolean")
+if antiAfkEnabled == nil then antiAfkEnabled = true end
+do
+    local okVU, VirtualUser = pcall(function() return game:GetService("VirtualUser") end)
+    player.Idled:Connect(function()
+        if not isCurrent() or not antiAfkEnabled then return end
+        local ok = false
+        if okVU and VirtualUser then
+            ok = pcall(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+        end
+        if not ok then
+            -- cadangan: tekan tombol virtual lewat VirtualInputManager
+            pcall(function()
+                local vim = game:GetService("VirtualInputManager")
+                vim:SendKeyEvent(true, Enum.KeyCode.Unknown, false, game)
+                vim:SendKeyEvent(false, Enum.KeyCode.Unknown, false, game)
+            end)
+        end
+        print("🛡️ [Anti-AFK] Idle terdeteksi, input virtual dikirim (" .. os.date("%H:%M:%S") .. ")")
+    end)
+end
 
 -- ⭐ AUTO-DETECT PICKAXE DARI GAME
 local function formatNumberAuto(num)
@@ -1635,7 +1666,7 @@ do
     local Title = NewLabel(Sidebar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
     Title.Size = UDim2.new(0, 80, 0, 18)
     Title.Position = UDim2.new(0, 56, 0, 15)
-    local Ver = NewLabel(Sidebar, "v41", 11, Enum.Font.Gotham, Colors.TextDim)
+    local Ver = NewLabel(Sidebar, "v42", 11, Enum.Font.Gotham, Colors.TextDim)
     Ver.Size = UDim2.new(0, 80, 0, 14)
     Ver.Position = UDim2.new(0, 56, 0, 33)
 
@@ -2098,7 +2129,7 @@ do
     local notifToggle = W.Switch(Scroll, "Notifikasi di layar", "Pop-up status", "bell", 24, notifEnabled)
     W.Stepper(Scroll, "Interval webhook", "Jeda kirim ke Discord", "bolt", 25, WEBHOOK_INTERVAL, 5, 300, 5, "s", function(v) WEBHOOK_INTERVAL = v; saveSetting("webhookInterval", v) end)
 
-    Section("Data", 26)
+    Section("Data", 28)
     local ResetBtn = Instance.new("TextButton", Scroll)
     ResetBtn.Size = UDim2.new(1, 0, 0, 32)
     ResetBtn.BackgroundColor3 = Colors.GlassPanel
@@ -2107,7 +2138,7 @@ do
     ResetBtn.Font = Enum.Font.GothamMedium
     ResetBtn.TextSize = 12
     ResetBtn.TextColor3 = Colors.Danger
-    ResetBtn.LayoutOrder = 27
+    ResetBtn.LayoutOrder = 29
     Instance.new("UICorner", ResetBtn).CornerRadius = UDim.new(0, 10)
     local RS = Instance.new("UIStroke", ResetBtn)
     RS.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
@@ -2117,7 +2148,19 @@ do
     local Spacer = Instance.new("Frame", Scroll)
     Spacer.Size = UDim2.new(1, 0, 0, 4)
     Spacer.BackgroundTransparency = 1
-    Spacer.LayoutOrder = 28
+    Spacer.LayoutOrder = 30
+
+    -- ═════ ANTI AFK (v42) ═════
+    Section("Anti AFK", 26)
+    local afkToggle = W.Switch(Scroll, "Anti AFK", "Cegah kick idle 20 menit", "user", 27, antiAfkEnabled)
+    afkToggle.SwitchBg.MouseButton1Click:Connect(function()
+        local newState = not afkToggle.GetState()
+        afkToggle.SetState(newState)
+        antiAfkEnabled = newState
+        saveSetting("antiAfk", newState)
+        showNotif(newState and "🛡️ ANTI AFK ON" or "🛡️ ANTI AFK OFF",
+            newState and "Kick idle dicegah" or "Roblox bisa kick setelah 20 menit diam", 3)
+    end)
 
     notifToggle.SwitchBg.MouseButton1Click:Connect(function()
         local newState = not notifToggle.GetState()
