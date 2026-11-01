@@ -119,28 +119,31 @@ config.DetectedTargets = config.DetectedTargets or {}
 config.OriginalTargets = config.OriginalTargets or {}
 if config.AntiAfk == nil then config.AntiAfk = true end   -- default ON
 
--- ═══════════ [ ANTI AFK ] ═══════════
--- Roblox memicu event Idled setelah ±2 menit tanpa input; saat itu dikirim
--- klik virtual sehingga timer idle di-reset (tidak kena kick 20 menit).
+-- ═══════════ [ ANTI AFK (Versi Aman) ] ═══════════
+-- Jangan sentuh player.Idled. Kirim input berkala via VirtualUser.
 do
-    local okVU, VirtualUser = pcall(function() return game:GetService("VirtualUser") end)
-    player.Idled:Connect(function()
-        if _G.StealEgg_RunId ~= RUN_ID or not config.AntiAfk then return end
-        local ok = false
-        if okVU and VirtualUser then
-            ok = pcall(function()
-                VirtualUser:CaptureController()
-                VirtualUser:ClickButton2(Vector2.new())
-            end)
-        end
-        if not ok then
+    local VirtualUser = game:GetService("VirtualUser")
+    local UserInputService = game:GetService("UserInputService")
+    
+    task.spawn(function()
+        while _G.StealEgg_RunId == RUN_ID and _G.StealEgg_Hub_Active do
+            task.wait(60) -- setiap 60 detik, sebelum timer idle 2 menit
+            if not _G.StealEgg_Hub_Active then break end
+            
             pcall(function()
-                local vim = game:GetService("VirtualInputManager")
-                vim:SendKeyEvent(true, Enum.KeyCode.Unknown, false, game)
-                vim:SendKeyEvent(false, Enum.KeyCode.Unknown, false, game)
+                -- Kirim klik kiri virtual (lebih umum dari klik kanan)
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton1(Vector2.new(0, 0))
+            end)
+            
+            -- Opsional: gerakkan mouse sedikit biar terlihat natural
+            pcall(function()
+                if UserInputService.MouseEnabled then
+                    local mouse = game.Players.LocalPlayer:GetMouse()
+                    -- Jangan gerakin mouse beneran, cukup trigger input kecil
+                end
             end)
         end
-        print("🛡️ [Anti-AFK] Idle terdeteksi, input virtual dikirim (" .. os.date("%H:%M:%S") .. ")")
     end)
 end
 
