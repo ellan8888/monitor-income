@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (v45 - auto add teman: daftar online + private server)
+-- ✨ V-Ziir0 Hub: Break & Steal (v46 - auto farm hidup/mati berdasarkan value pet)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ SISTEM ANTI-DOUBLE
@@ -225,6 +225,7 @@ do
     local j = getSetting("autoJump", "boolean");     if j ~= nil then isAutoJumpEnabled = j end
 end
 print("💾 V-Ziir0: state akun " .. player.Name .. " (" .. ACCOUNT_ID .. ") → " .. tostring(STATE_FILE))
+local PetWatch = {}   -- v46: diisi di bagian PET WATCH (auto farm berdasarkan pet)
 local autoFriendEnabled = getSetting("autoFriend", "boolean")
 if autoFriendEnabled == nil then autoFriendEnabled = true end   -- default ON
 
@@ -1653,7 +1654,7 @@ do
     local Title = NewLabel(Sidebar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
     Title.Size = UDim2.new(0, 80, 0, 18)
     Title.Position = UDim2.new(0, 56, 0, 15)
-    local Ver = NewLabel(Sidebar, "v45", 11, Enum.Font.Gotham, Colors.TextDim)
+    local Ver = NewLabel(Sidebar, "v46", 11, Enum.Font.Gotham, Colors.TextDim)
     Ver.Size = UDim2.new(0, 80, 0, 14)
     Ver.Position = UDim2.new(0, 56, 0, 33)
 
@@ -2135,7 +2136,37 @@ do
     local Spacer = Instance.new("Frame", Scroll)
     Spacer.Size = UDim2.new(1, 0, 0, 4)
     Spacer.BackgroundTransparency = 1
-    Spacer.LayoutOrder = 31
+    Spacer.LayoutOrder = 35
+
+    -- ═════ BASE SAYA (v46, untuk auto farm berdasarkan pet) ═════
+    Section("Base saya", 32)
+    local BaseInfo = Hint("Base: belum terdeteksi", 33)
+    local SetBaseBtn = Instance.new("TextButton", Scroll)
+    SetBaseBtn.Size = UDim2.new(1, 0, 0, 30)
+    SetBaseBtn.BackgroundColor3 = Colors.GlassPanel
+    SetBaseBtn.AutoButtonColor = false
+    SetBaseBtn.Text = "Set base = plot terdekat (berdiri di base-mu)"
+    SetBaseBtn.Font = Enum.Font.GothamMedium
+    SetBaseBtn.TextSize = 11
+    SetBaseBtn.TextColor3 = Colors.Accent
+    SetBaseBtn.LayoutOrder = 34
+    Instance.new("UICorner", SetBaseBtn).CornerRadius = UDim.new(0, 10)
+    do
+        local st = Instance.new("UIStroke", SetBaseBtn)
+        st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        st.Thickness = 1
+        st.Color = Colors.Border
+    end
+    SetBaseBtn.MouseButton1Click:Connect(function()
+        local p = PetWatch.setNearest and PetWatch.setNearest()
+        showNotif(p and "🏠 BASE DI-SET" or "❌ GAGAL", p and ("Base kamu: " .. p.Name) or "Plot tidak ditemukan", 4)
+    end)
+    task.spawn(function()
+        while BaseInfo.Parent and isCurrent() do
+            BaseInfo.Text = tostring(PetWatch.baseText or "Base: belum terdeteksi")
+            task.wait(2)
+        end
+    end)
 
     -- ═════ TEMAN MULTI-AKUN (v44) ═════
     Section("Teman multi-akun", 26)
@@ -2173,6 +2204,7 @@ do
                 activeProfileName = cfg.name
                 is_farm_stopped = false
                 is_monitoring = true
+                if PetWatch.syncFarmState then PetWatch.syncFarmState(true) end
                 hasCheckedOwnership = false
                 hasCheckedTarget = false 
                 prereqName = cfg.prereqName or "Galaxy"
@@ -2577,6 +2609,7 @@ local function computeView()
     local money_str, speed_str = getMyData()
     local money_num, speed_num = parseNumber(money_str), parseNumber(speed_str)
     local incomeOK = is_income_done or (targetIncome > 0 and money_num >= targetIncome)
+    local incomePhaseDone = true   -- v46: farm diatur pet, fase income tidak menahan alur
     local speedOK = is_speed_done or (targetSpeedValue > 0 and speed_num >= targetSpeedValue)
 
     local incPct = incomeOK and 1 or pctOf(money_num, targetIncome)
@@ -2591,7 +2624,7 @@ local function computeView()
         bars.pick = { pct = 1, text = "Selesai" }
     end
 
-    if not incomeOK then
+    if not incomePhaseDone and not incomeOK then
         return { idx = 1, color = Colors.Accent, sub = "Income", pct = incPct, caption = formatNumber(money_num) .. " / " .. formatNumber(targetIncome), bars = bars }
     elseif not speedOK then
         return { idx = 2, color = Colors.Green, sub = "Speed", pct = spdPct, caption = formatNumber(speed_num) .. " / " .. formatNumber(targetSpeedValue), bars = bars }
@@ -2607,7 +2640,7 @@ local function ApplyView(v)
     -- kartu profil aktif
     if is_monitoring then
         UI.CardName.Text = tostring(activeProfileName)
-        UI.CardSub.Text = "Kapak target: " .. tostring(targetPickaxeName)
+        UI.CardSub.Text = tostring(PetWatch.caption or ("Kapak target: " .. tostring(targetPickaxeName)))
         UI.TgtInc.Text = formatNumber(targetIncome)
         UI.TgtSpd.Text = formatNumber(targetSpeedValue)
     elseif autoBuyEnabled then
@@ -2673,6 +2706,198 @@ task.spawn(function()
     end
 end)
 
+-- ═══════════════════════════════════════════════════════
+-- ⭐ PET WATCH (v46) — auto farm hidup/mati berdasarkan pet
+--   Farm HIDUP kalau:  base belum penuh, ATAU ada pet spawn
+--                      (Workspace.AnimalPickups) dengan value > pet terendah di base-mu
+--   Farm MATI kalau:   base penuh DAN tidak ada pet spawn yang lebih bernilai
+--   Base-mu dicari otomatis di Workspace.Plots (nama/UserId di atribut, Value,
+--   atau papan nama). Cadangan: Pengaturan > Base saya > "Set base = plot terdekat".
+--   Kalau base belum diketahui, farm dibiarkan HIDUP.
+-- ═══════════════════════════════════════════════════════
+do
+    local SUF = { [""] = 1, K = 1e3, M = 1e6, B = 1e9, T = 1e12, QA = 1e15, QI = 1e18, SX = 1e21, SP = 1e24 }
+    local function parseCash(text)
+        local num, suf = tostring(text or ""):match("%$%s*([%d%.,]+)%s*(%a*)%s*/%s*[sS]")
+        if not num then return nil end
+        local n, m = tonumber((num:gsub(",", ""))), SUF[suf:upper()]
+        return (n and m) and n * m or nil
+    end
+
+    -- value $/s sebuah pet (dari label CashPerSecond di AnimalOverhead)
+    local function petValue(model)
+        local best
+        for _, d in ipairs(model:GetDescendants()) do
+            if d:IsA("TextLabel") then
+                local ok, t = pcall(function() return (d.ContentText ~= "" and d.ContentText) or d.Text end)
+                local v = ok and parseCash(t)
+                if v and (not best or v > best) then best = v end
+            end
+        end
+        return best
+    end
+
+    local function matchesMe(v)
+        if v == nil then return false end
+        if typeof(v) == "Instance" then return v == player end
+        local sv = tostring(v)
+        return sv == player.Name or sv == tostring(player.UserId) or sv == player.DisplayName
+    end
+
+    local function findMyPlot()
+        local plots = workspace:FindFirstChild("Plots")
+        if not plots then return nil end
+        for _, plot in ipairs(plots:GetChildren()) do
+            for _, v in pairs(plot:GetAttributes()) do
+                if matchesMe(v) then return plot, "atribut" end
+            end
+            for _, d in ipairs(plot:GetChildren()) do
+                if d:IsA("ValueBase") and matchesMe(d.Value) then return plot, "value" end
+            end
+        end
+        for _, plot in ipairs(plots:GetChildren()) do
+            for _, child in ipairs(plot:GetChildren()) do
+                if child.Name ~= "PlacedAnimals" then
+                    for _, d in ipairs(child:GetDescendants()) do
+                        if d:IsA("TextLabel") then
+                            local t = d.Text
+                            if t:find(player.Name, 1, true) or (player.DisplayName ~= "" and t:find(player.DisplayName, 1, true)) then
+                                return plot, "papan nama"
+                            end
+                        elseif d:IsA("ValueBase") and matchesMe(d.Value) then
+                            return plot, "value"
+                        end
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
+    -- kapasitas base dari label "16/16 Active" di layar (kalau ada)
+    local capLabel
+    local function readCapacity()
+        if not (capLabel and capLabel.Parent) then
+            capLabel = nil
+            local pg = player:FindFirstChildOfClass("PlayerGui")
+            if pg then
+                for _, d in ipairs(pg:GetDescendants()) do
+                    if d:IsA("TextLabel") and d.Text:match("^%s*%d+%s*/%s*%d+%s*[Aa]ctive") then capLabel = d break end
+                end
+            end
+        end
+        if capLabel then
+            local used, max = capLabel.Text:match("(%d+)%s*/%s*(%d+)")
+            return tonumber(used), tonumber(max)
+        end
+        return nil
+    end
+
+    PetWatch.myPlot = nil
+    PetWatch.source = nil
+    PetWatch.farmActive = true      -- anggapan awal: auto farm sedang hidup
+    PetWatch.caption = "Menunggu data pet..."
+    PetWatch.baseText = "Base: belum terdeteksi"
+    local lastSearch, lastEval, pending = -100, -100, 0
+
+    PetWatch.setNearest = function()
+        local plots = workspace:FindFirstChild("Plots")
+        local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if not plots or not root then return nil end
+        local best, bestD
+        for _, plot in ipairs(plots:GetChildren()) do
+            local ok, pos = pcall(function() return plot:GetPivot().Position end)
+            if ok then
+                local d = (pos - root.Position).Magnitude
+                if not bestD or d < bestD then best, bestD = plot, d end
+            end
+        end
+        if best then
+            PetWatch.myPlot, PetWatch.source = best, "plot terdekat"
+            PetWatch.baseText = "Base: " .. best.Name .. " (set manual)"
+            print("🏠 [Pet Watch] Base di-set manual: " .. best.Name)
+        end
+        return best
+    end
+
+    PetWatch.syncFarmState = function(isOn) PetWatch.farmActive = isOn; pending = 0 end
+
+    -- evaluasi kondisi; return true kalau status farm berubah
+    PetWatch.update = function()
+        if os.clock() - lastEval < 1.5 then return false end
+        lastEval = os.clock()
+
+        if not (PetWatch.myPlot and PetWatch.myPlot.Parent) and os.clock() - lastSearch > 15 then
+            lastSearch = os.clock()
+            local ok, plot, src = pcall(findMyPlot)
+            if ok and plot then
+                PetWatch.myPlot, PetWatch.source = plot, src
+                PetWatch.baseText = "Base: " .. plot.Name .. " (" .. src .. ")"
+                print("🏠 [Pet Watch] Base kamu: " .. plot.Name .. " (terdeteksi dari " .. src .. ")")
+            end
+        end
+
+        local desired, reason
+        local plot = PetWatch.myPlot
+        if not (plot and plot.Parent) then
+            desired, reason = true, "base belum terdeteksi (atur di Pengaturan)"
+        else
+            -- pet di base
+            local baseMin, baseCount = nil, 0
+            local placed = plot:FindFirstChild("PlacedAnimals")
+            if placed then
+                for _, pet in ipairs(placed:GetChildren()) do
+                    local v = petValue(pet)
+                    if v then
+                        baseCount = baseCount + 1
+                        if not baseMin or v < baseMin then baseMin = v end
+                    end
+                end
+            end
+            -- pet spawn terbaik
+            local best, bestName = nil, nil
+            local pickups = workspace:FindFirstChild("AnimalPickups")
+            if pickups then
+                for _, pet in ipairs(pickups:GetChildren()) do
+                    local v = petValue(pet)
+                    if v and (not best or v > best) then best, bestName = v, pet.Name end
+                end
+            end
+
+            local used, max = readCapacity()
+            local full
+            if used and max and max > 0 then full = used >= max else full = baseCount > 0 end
+
+            if not full then
+                desired = true
+                reason = "base belum penuh" .. ((used and max) and (" (" .. used .. "/" .. max .. ")") or "")
+            elseif best and baseMin and best > baseMin then
+                desired = true
+                reason = tostring(bestName) .. " $" .. formatNumber(best) .. "/s > base min $" .. formatNumber(baseMin) .. "/s"
+            else
+                desired = false
+                reason = "tidak ada pet > base min $" .. formatNumber(baseMin or 0) .. "/s"
+                    .. (best and (" (terbaik $" .. formatNumber(best) .. "/s)") or "")
+            end
+        end
+
+        PetWatch.caption = (PetWatch.farmActive and "Farm ON · " or "Farm OFF · ") .. reason
+
+        -- ubah farm hanya kalau kondisi sama 2x berturut-turut (hindari bolak-balik)
+        if desired == PetWatch.farmActive then pending = 0 return false end
+        pending = pending + 1
+        if pending < 2 then return false end
+        pending = 0
+
+        if desired then startAutoFarm() else stopAutoFarm() end
+        PetWatch.farmActive = desired
+        PetWatch.caption = (desired and "Farm ON · " or "Farm OFF · ") .. reason
+        showNotif(desired and "🚀 AUTO FARM ON" or "🛑 AUTO FARM OFF", reason, 5)
+        PetWatch.lastReason = reason
+        return true
+    end
+end
+
 -- ═══════════ [ LOOP UTAMA ] ═══════════
 task.spawn(function()
     print("✅ Monitor Break & Steal berjalan!")
@@ -2687,33 +2912,23 @@ task.spawn(function()
         updateSpeedActivity(speed_str)
         
         if is_monitoring then
+            -- v46: auto farm hidup/mati berdasarkan pet (target income tidak lagi mematikan farm)
             local speed_num = parseNumber(speed_str)
-            if not is_buying_pickaxe and not is_income_done and (money_num >= targetIncome) then
-                is_income_done = true 
-                onTargetReached()
-                sendToDiscord(money_str, speed_str, "+ AUTO FARM STOPPED (" .. tostring(activeProfileName) .. ")")
-                is_speed_done = false 
+            if not is_speed_done and targetSpeedValue > 0 and speed_num >= targetSpeedValue then
+                is_speed_done = true
+                showNotif("⚡ SPEED TERCAPAI", "Speed " .. formatNumber(speed_num) .. " / " .. formatNumber(targetSpeedValue), 4)
             end
-            if is_farm_stopped and not is_speed_done and targetSpeedValue > 0 then
-                if speed_num >= targetSpeedValue then
-                    is_speed_done = true
-                    if autoBuyEnabled then
-                        local currentCash = getRealCash()
-                        if currentCash < targetBuyPrice then
-                            is_farm_stopped = false 
-                            is_income_done = true 
-                            is_buying_pickaxe = true 
-                            startAutoFarm() 
-                            showNotif("🔄 AUTO RE-FARM", "Speed tercapai, tapi uang belum cukup. Lanjut farming!", 5)
-                        end
-                    end
-                end
+            local okPW, changed = pcall(PetWatch.update)
+            is_farm_stopped = not PetWatch.farmActive
+            if okPW and changed then
+                sendToDiscord(money_str, speed_str, (PetWatch.farmActive and "+ AUTO FARM ON (" or "+ AUTO FARM OFF (")
+                    .. tostring(PetWatch.lastReason) .. ")")
             end
         end
 
         if money_str ~= lastMoney or speed_str ~= lastSpeed then
             if (os.time() - lastWebhookTime) >= WEBHOOK_INTERVAL then
-                local status = is_farm_stopped and "✅ TARGET TERCAPAI" or "🟢 FARMING ACTIVE"
+                local status = is_farm_stopped and "⏸ FARM OFF (tidak ada pet lebih bagus)" or "🟢 FARMING ACTIVE"
                 sendToDiscord(money_str, speed_str, status)
                 lastMoney, lastSpeed = money_str, speed_str
                 lastWebhookTime = os.time()
