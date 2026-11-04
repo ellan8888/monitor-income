@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (v43 - target MAX 150T, Fairy 100T, Castle 20T)
+-- ✨ V-Ziir0 Hub: Break & Steal (v45 - auto add teman: daftar online + private server)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ SISTEM ANTI-DOUBLE
@@ -59,6 +59,19 @@ local MASTER_CONFIG = {
     -- Kalau ada pickaxe baru dari game, tambahin di sini (contoh):
     -- ["Haunted Pickaxe"] = { income = 3e12, speed = 1.5e12 },
 }
+
+-- ⭐ AKUN SENDIRI — untuk Auto add teman antar akun (Pengaturan > Teman multi-akun).
+-- Akun yang menjalankan V-Ziir0 Hub TERDAFTAR OTOMATIS (file lokal + daftar online
+-- di My Task Manager), dan di private server milikmu semua pemain di-add.
+-- Daftar ini hanya cadangan untuk akun yang tidak menjalankan hub. Isi username atau UserId.
+local MY_ACCOUNTS = {
+    -- "UsernameAkun2",
+    -- 123456789,
+}
+
+-- daftar akun online (My Task Manager → Supabase), dipakai lintas device
+local FRIEND_API_URL = "https://my-task-manager-self.vercel.app/api/vziir0/accounts"
+local FRIEND_API_KEY = "vziir0-hub-key"   -- harus sama dengan VZIIR0_HUB_KEY di Vercel
 
 local DEFAULT_INCOME = 2e12
 local DEFAULT_SPEED = 1e12 
@@ -212,6 +225,8 @@ do
     local j = getSetting("autoJump", "boolean");     if j ~= nil then isAutoJumpEnabled = j end
 end
 print("💾 V-Ziir0: state akun " .. player.Name .. " (" .. ACCOUNT_ID .. ") → " .. tostring(STATE_FILE))
+local autoFriendEnabled = getSetting("autoFriend", "boolean")
+if autoFriendEnabled == nil then autoFriendEnabled = true end   -- default ON
 
 -- ⭐ AUTO-DETECT PICKAXE DARI GAME
 local function formatNumberAuto(num)
@@ -1638,7 +1653,7 @@ do
     local Title = NewLabel(Sidebar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
     Title.Size = UDim2.new(0, 80, 0, 18)
     Title.Position = UDim2.new(0, 56, 0, 15)
-    local Ver = NewLabel(Sidebar, "v43", 11, Enum.Font.Gotham, Colors.TextDim)
+    local Ver = NewLabel(Sidebar, "v45", 11, Enum.Font.Gotham, Colors.TextDim)
     Ver.Size = UDim2.new(0, 80, 0, 14)
     Ver.Position = UDim2.new(0, 56, 0, 33)
 
@@ -2101,7 +2116,7 @@ do
     local notifToggle = W.Switch(Scroll, "Notifikasi di layar", "Pop-up status", "bell", 24, notifEnabled)
     W.Stepper(Scroll, "Interval webhook", "Jeda kirim ke Discord", "bolt", 25, WEBHOOK_INTERVAL, 5, 300, 5, "s", function(v) WEBHOOK_INTERVAL = v; saveSetting("webhookInterval", v) end)
 
-    Section("Data", 26)
+    Section("Data", 29)
     local ResetBtn = Instance.new("TextButton", Scroll)
     ResetBtn.Size = UDim2.new(1, 0, 0, 32)
     ResetBtn.BackgroundColor3 = Colors.GlassPanel
@@ -2110,7 +2125,7 @@ do
     ResetBtn.Font = Enum.Font.GothamMedium
     ResetBtn.TextSize = 12
     ResetBtn.TextColor3 = Colors.Danger
-    ResetBtn.LayoutOrder = 27
+    ResetBtn.LayoutOrder = 30
     Instance.new("UICorner", ResetBtn).CornerRadius = UDim.new(0, 10)
     local RS = Instance.new("UIStroke", ResetBtn)
     RS.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
@@ -2120,7 +2135,20 @@ do
     local Spacer = Instance.new("Frame", Scroll)
     Spacer.Size = UDim2.new(1, 0, 0, 4)
     Spacer.BackgroundTransparency = 1
-    Spacer.LayoutOrder = 28
+    Spacer.LayoutOrder = 31
+
+    -- ═════ TEMAN MULTI-AKUN (v44) ═════
+    Section("Teman multi-akun", 26)
+    local friendToggle = W.Switch(Scroll, "Auto add akun sendiri", "Add & terima akun V-Ziir0 di server ini", "user", 27, autoFriendEnabled)
+    Hint("Akun yang jalankan hub (semua device) + semua pemain di private server", 28)
+    friendToggle.SwitchBg.MouseButton1Click:Connect(function()
+        local newState = not friendToggle.GetState()
+        friendToggle.SetState(newState)
+        autoFriendEnabled = newState
+        saveSetting("autoFriend", newState)
+        showNotif(newState and "👥 AUTO ADD ON" or "👥 AUTO ADD OFF",
+            newState and "Akun sendiri di server ini akan di-add otomatis" or "Auto add & terima teman dimatikan", 3)
+    end)
 
     notifToggle.SwitchBg.MouseButton1Click:Connect(function()
         local newState = not notifToggle.GetState()
@@ -2778,6 +2806,157 @@ local function autoReExecute()
     end)
     
     task.delay(5, function() _G.VZiir0_AutoExec_Active = nil end)
+end
+
+-- ═══════════════════════════════════════════════════════
+-- ⭐ AUTO ADD & TERIMA TEMAN ANTAR AKUN SENDIRI (v44)
+-- • Setiap akun yang menjalankan hub mendaftarkan diri ke file bersama
+--   workspace/VZiir0Hub/BreakSteal/accounts.json (semua akun di PC ini).
+-- • v45: juga terdaftar ONLINE (My Task Manager) → akun di device lain ikut dikenali.
+-- • v45: di PRIVATE SERVER milik seseorang, semua pemain di server dianggap akun sendiri.
+-- • Akun terdaftar (atau di MY_ACCOUNTS) yang ada di server yang sama
+--   dikirimi permintaan teman; kalau dia sudah mengirim duluan, permintaan
+--   ini sekaligus MENERIMA. Di server publik, pemain lain TIDAK pernah di-add.
+-- ═══════════════════════════════════════════════════════
+do
+    local Players = game:GetService("Players")
+    local REG_FILE
+    if canFS then
+        if STATE_FILE and STATE_FILE:find("/", 1, true) then
+            REG_FILE = STATE_FILE:gsub("[^/]+$", "accounts.json")
+        else
+            REG_FILE = "VZiir0Hub_BreakSteal_accounts.json"
+        end
+    end
+
+    local function readReg()
+        local reg = {}
+        if not REG_FILE then return reg end
+        pcall(function()
+            if isfile(REG_FILE) then
+                local d = HttpService:JSONDecode(readfile(REG_FILE))
+                if type(d) == "table" and type(d.accounts) == "table" then reg = d.accounts end
+            end
+        end)
+        return reg
+    end
+
+    local function register()
+        if not REG_FILE then return end
+        local reg = readReg()
+        local now = os.time()
+        reg[ACCOUNT_ID] = { name = player.Name, last = now }
+        for uid, info in pairs(reg) do   -- buang akun yang 30 hari tidak menjalankan hub
+            if type(info) ~= "table" or (now - (tonumber(info.last) or 0)) > 30 * 86400 then reg[uid] = nil end
+        end
+        pcall(function() writefile(REG_FILE, HttpService:JSONEncode({ version = 1, accounts = reg })) end)
+    end
+
+    -- ── daftar online (lintas device) ──
+    local onlineIds = {}
+    local function apiCall(method, body)
+        if not httpFn then return nil end
+        local ok, res = pcall(function()
+            return httpFn({
+                Url = FRIEND_API_URL,
+                Method = method,
+                Headers = { ["Content-Type"] = "application/json", ["x-hub-key"] = FRIEND_API_KEY },
+                Body = body and HttpService:JSONEncode(body) or nil,
+            })
+        end)
+        if not ok or type(res) ~= "table" then return nil end
+        local code = tonumber(res.StatusCode) or 0
+        if code < 200 or code >= 300 then
+            warn("[Auto Add] API " .. method .. " gagal (HTTP " .. tostring(code) .. ")")
+            return nil
+        end
+        local okJ, data = pcall(function() return HttpService:JSONDecode(res.Body or "") end)
+        return okJ and data or nil
+    end
+    local function registerOnline()
+        apiCall("POST", { user_id = player.UserId, username = player.Name })
+    end
+    local function refreshOnline()
+        local data = apiCall("GET")
+        if data and type(data.accounts) == "table" then
+            local fresh = {}
+            for _, a in ipairs(data.accounts) do
+                if a.user_id then fresh[tostring(a.user_id)] = true end
+            end
+            onlineIds = fresh
+        end
+    end
+
+    -- private server milik seseorang (bukan reserved server buatan game)
+    local function inPrivateServer()
+        local ok, owner = pcall(function() return game.PrivateServerOwnerId end)
+        return ok and tonumber(owner) ~= nil and tonumber(owner) ~= 0
+    end
+
+    local manualIds, manualNames = {}, {}
+    for _, v in ipairs(MY_ACCOUNTS) do
+        if tonumber(v) then manualIds[tostring(math.floor(tonumber(v)))] = true
+        elseif type(v) == "string" and v ~= "" then manualNames[v:lower()] = true end
+    end
+
+    local reg = {}
+    local function isOwn(p)
+        if not p or p == player then return false end
+        local uid = tostring(p.UserId)
+        return inPrivateServer() or reg[uid] ~= nil or onlineIds[uid] == true
+            or manualIds[uid] == true or manualNames[p.Name:lower()] == true
+    end
+
+    local sent = {}   -- [UserId] = { at = os.clock(), tries = n }
+    local function tryAdd(p, reason, force)
+        if not autoFriendEnabled or not isCurrent() or not isOwn(p) then return end
+        local okF, isFriend = pcall(function() return player:IsFriendsWith(p.UserId) end)
+        if okF and isFriend then sent[p.UserId] = nil; return end
+        local s = sent[p.UserId]
+        if s and not force and ((os.clock() - s.at) < 120 or s.tries >= 3) then return end   -- maks 3x, jeda 2 menit
+        local ok = pcall(function() player:RequestFriendship(p) end)
+        sent[p.UserId] = { at = os.clock(), tries = (s and s.tries or 0) + 1 }
+        if ok then
+            print("👥 [Auto Add] " .. reason .. ": " .. p.Name)
+            if showNotif then showNotif("👥 AUTO ADD", reason .. ": " .. p.Name, 3) end
+        end
+    end
+
+    -- terima otomatis kalau akun sendiri mengirim permintaan duluan
+    pcall(function()
+        player.FriendRequestEvent:Connect(function(fromP, toP, ev)
+            if toP == player and ev == Enum.FriendRequestEvent.Issue then
+                reg = readReg()
+                if not isOwn(fromP) then refreshOnline() end   -- mungkin akun baru dari device lain
+                task.delay(1, function() tryAdd(fromP, "Terima teman", true) end)
+            end
+        end)
+    end)
+
+    task.spawn(function()
+        register()
+        registerOnline()
+        local lastReg = os.clock()
+        task.wait(8)   -- tunggu akun lain sempat mendaftar
+        refreshOnline()
+        local lastOnline = os.clock()
+        if inPrivateServer() then print("👥 [Auto Add] Private server terdeteksi: semua pemain di server akan di-add") end
+        while isCurrent() do
+            if os.clock() - lastReg > 300 then register(); registerOnline(); lastReg = os.clock() end
+            if os.clock() - lastOnline > 60 then refreshOnline(); lastOnline = os.clock() end
+            if autoFriendEnabled then
+                reg = readReg()
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if not isCurrent() then break end
+                    if isOwn(p) then
+                        tryAdd(p, "Add akun sendiri")
+                        task.wait(2)   -- jeda antar permintaan
+                    end
+                end
+            end
+            task.wait(15)
+        end
+    end)
 end
 
 -- ⭐ AUTO-LOAD STATE
