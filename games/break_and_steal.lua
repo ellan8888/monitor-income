@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (v41 - target kapak: MAX / nomor urut / nama, dari script atau UI)
+-- ✨ V-Ziir0 Hub: Break & Steal (v42 - target kapak MAX/nomor/nama + anti AFK Gio)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ SISTEM ANTI-DOUBLE
@@ -49,7 +49,7 @@ local MASTER_CONFIG = {
     -- Angka: 1e9 = 1B, 1e12 = 1T, 1e15 = 1Qa  (2.5e12 = 2.5T, 500e9 = 500B)
     -- Target yang diatur dari UI (Pengaturan > Target per kapak) mengalahkan semua ini.
     -- Format: ["Nama Pickaxe"] = { income = Angka, speed = Angka }
-    ["Haunted Pickaxe"] = { income = 5e12, speed = 2e12 },
+    ["MAX"] = { income = 5e12, speed = 5e12 },
     ["Enchanted Pickaxe"] = { income = 2e12, speed = 1e12 },  -- 2T Income, 1T Speed
     ["Celestial Pickaxe"] = { income = 1e12, speed = 500e9 }, -- 1T Income, 500B Speed
     
@@ -209,6 +209,27 @@ do
     local j = getSetting("autoJump", "boolean");     if j ~= nil then isAutoJumpEnabled = j end
 end
 print("💾 V-Ziir0: state akun " .. player.Name .. " (" .. ACCOUNT_ID .. ") → " .. tostring(STATE_FILE))
+
+-- ═══════════ [ ANTI AFK ] ═══════════
+-- ANTI AFK made by Muscle_legends2021 [Gio]
+do
+    local VirtualUser = game:GetService('VirtualUser')
+
+    game:GetService('Players').LocalPlayer.Idled:Connect(function()
+        if not isCurrent() then return end   -- cegah dobel kalau script dijalankan ulang
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end)
+
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "AntiAFK loaded!",
+            Text = "Made by Gio",
+            Button1 = "Thanks",
+            Duration = 5
+        })
+    end)
+end
 
 -- ⭐ AUTO-DETECT PICKAXE DARI GAME
 local function formatNumberAuto(num)
@@ -1635,7 +1656,7 @@ do
     local Title = NewLabel(Sidebar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
     Title.Size = UDim2.new(0, 80, 0, 18)
     Title.Position = UDim2.new(0, 56, 0, 15)
-    local Ver = NewLabel(Sidebar, "v41", 11, Enum.Font.Gotham, Colors.TextDim)
+    local Ver = NewLabel(Sidebar, "v42", 11, Enum.Font.Gotham, Colors.TextDim)
     Ver.Size = UDim2.new(0, 80, 0, 14)
     Ver.Position = UDim2.new(0, 56, 0, 33)
 
