@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (v47 - speed tercapai = auto farm selalu hidup)
+-- ✨ V-Ziir0 Hub: Break & Steal (v49 - joki: fokus beli kapak, auto farm selalu hidup)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ SISTEM ANTI-DOUBLE
@@ -226,6 +226,7 @@ do
 end
 print("💾 V-Ziir0: state akun " .. player.Name .. " (" .. ACCOUNT_ID .. ") → " .. tostring(STATE_FILE))
 local PetWatch = {}   -- v46: diisi di bagian PET WATCH (auto farm berdasarkan pet)
+local JokiState = { active = false }   -- v48: diisi di bagian TAB JOKI
 local autoFriendEnabled = getSetting("autoFriend", "boolean")
 if autoFriendEnabled == nil then autoFriendEnabled = true end   -- default ON
 
@@ -669,6 +670,21 @@ local function sendToDiscord(money, speed, status_text)
         footer = { text = "V-Ziir0 Hub • " .. os.date("%H:%M:%S") },
         timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
     }
+    -- v48: akun JOKI → format khusus (baris [JOKI-BNS] mudah dibaca bot)
+    if JokiState.active and JokiState.cfg then
+        local cfg = JokiState.cfg
+        local status = (tostring(status_text or "FARMING")):gsub("^[%+%-]%s*", "")
+        embed.title = "🛠️ JOKI BREAK & STEAL"
+        embed.color = 0xF07A2B
+        table.insert(embed.fields, 1, { name = "🛠️ ▸ PRODUK JOKI", value = "```yaml\n" .. cfg.pickaxeName .. "```", inline = true })
+        local cash = getRealCash()
+        table.insert(embed.fields, 2, { name = "💵 ▸ HARGA KAPAK", value = "```yaml\n" .. formatNumber(cash) .. " / " .. formatNumber(cfg.pickaxePrice) .. "```", inline = true })
+        local line = string.format("[JOKI-BNS] user=%s | userid=%d | produk=%s | harga=%s | cash=%s | income=%s | speed=%s | status=%s",
+            player.Name, player.UserId, cfg.pickaxeName, formatNumber(cfg.pickaxePrice), formatNumber(cash),
+            tostring(money), tostring(speed), status)
+        sendWebhook({ username = "🛠️ Break & Steal Joki", avatar_url = "https://cdn-icons-png.flaticon.com/512/1055/1055687.png", content = line, embeds = { embed } })
+        return
+    end
     sendWebhook({ username = "🔒 Break & Steal Monitor", avatar_url = "https://cdn-icons-png.flaticon.com/512/1055/1055687.png", embeds = { embed } })
 end
 
@@ -1626,8 +1642,8 @@ W.Profile = function(parent, cfg, order)
 end
 
 -- ═══════════ [ SIDEBAR ] ═══════════
-local HomeBtn, AutoBuyBtn, SettingsBtn
-local SetHomeActive, SetAutoBuyActive, SetSettingsActive
+local HomeBtn, AutoBuyBtn, SettingsBtn, JokiBtn
+local SetHomeActive, SetAutoBuyActive, SetSettingsActive, SetJokiActive
 local MonitorBadge
 do
     local Sidebar = Instance.new("Frame", MainFrame)
@@ -1654,7 +1670,7 @@ do
     local Title = NewLabel(Sidebar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
     Title.Size = UDim2.new(0, 80, 0, 18)
     Title.Position = UDim2.new(0, 56, 0, 15)
-    local Ver = NewLabel(Sidebar, "v47", 11, Enum.Font.Gotham, Colors.TextDim)
+    local Ver = NewLabel(Sidebar, "v49", 11, Enum.Font.Gotham, Colors.TextDim)
     Ver.Size = UDim2.new(0, 80, 0, 14)
     Ver.Position = UDim2.new(0, 56, 0, 33)
 
@@ -1663,7 +1679,7 @@ do
     MainLbl.Position = UDim2.new(0, 20, 0, 68)
 
     local NavList = Instance.new("Frame", Sidebar)
-    NavList.Size = UDim2.new(1, -20, 0, 120)
+    NavList.Size = UDim2.new(1, -20, 0, 160)
     NavList.Position = UDim2.new(0, 10, 0, 88)
     NavList.BackgroundTransparency = 1
     local NavLayout = Instance.new("UIListLayout", NavList)
@@ -1719,7 +1735,8 @@ do
 
     HomeBtn, SetHomeActive, MonitorBadge = CreateNavButton("Monitor", "monitor", 1)
     AutoBuyBtn, SetAutoBuyActive = CreateNavButton("Auto Buy", "shop", 2)
-    SettingsBtn, SetSettingsActive = CreateNavButton("Pengaturan", "settings", 3)
+    JokiBtn, SetJokiActive = CreateNavButton("Joki", "crown", 3)
+    SettingsBtn, SetSettingsActive = CreateNavButton("Pengaturan", "settings", 4)
 
     -- kartu akun di bawah
     local FootSep = Instance.new("Frame", Sidebar)
@@ -2193,6 +2210,7 @@ do
         local toggleObj = W.Profile(ProfileList, cfg, #CONFIG_DB - i)
         local function callbackFn(state)
             if state then
+                if JokiState.active and JokiState.stop then JokiState.stop(false) end
                 for _, other in pairs(monitorToggles) do
                     if other ~= toggleObj and other.SetState then other.SetState(false) end
                 end
@@ -2521,20 +2539,245 @@ local function PaintPickaxeRows()
     end
 end
 
+-- ═══════════════════════════════════════════════════════
+-- ── TAB JOKI (v48) ─────────────────────────────────────
+-- Daftar produk joki = kapak Celestial s/d kapak terbaru (otomatis dari game).
+-- Pilih produk → auto buy kapak itu jalan, webhook pakai format JOKI
+-- (baris teks "[JOKI-BNS] ..." supaya bisa dibaca bot).
+-- v49: joki TIDAK pakai target income/speed — fokus beli kapak, auto farm SELALU hidup.
+-- ═══════════════════════════════════════════════════════
+local JokiTab = Instance.new("Frame", ContentArea)
+JokiTab.Size = UDim2.new(1, 0, 1, 0)
+JokiTab.BackgroundTransparency = 1
+JokiTab.Visible = false
+
+do
+    local function idxOfId(id)
+        for i, pk in ipairs(PICKAXE_DB) do if pk.id == id then return i end end
+        return nil
+    end
+    local function firstProductIdx()
+        for i, pk in ipairs(PICKAXE_DB) do
+            if tostring(pk.name):lower():find("celestial", 1, true) then return i end
+        end
+        return idxOfId(18) or 18
+    end
+
+    -- buat cfg (bentuk sama seperti profil) untuk produk kapak di PICKAXE_DB[idx]
+    local function productCfg(idx)
+        local pk = PICKAXE_DB[idx]
+        if not pk then return nil end
+        local galaxy = PICKAXE_DB[idxOfId(17) or 17]
+        return {
+            key = "joki:" .. tostring(pk.id), name = "Joki " .. pk.name, isMax = (idx == #PICKAXE_DB),
+            amount = 0, targetSpeed = 0,   -- v49: joki tidak pakai target income/speed
+            pickaxeIdx = idx, pickaxeId = pk.id, pickaxeName = pk.name, pickaxePrice = pk.priceRaw,
+            prereqId = galaxy and galaxy.id or 17, prereqName = galaxy and galaxy.name or "Galaxy",
+            prereqPrice = galaxy and galaxy.priceRaw or 4e15,
+        }
+    end
+
+    JokiState.event = function(kind, statusText)
+        local m, s = getMyData()
+        sendToDiscord(m, s, statusText or ("+ JOKI " .. kind))
+    end
+
+    JokiState.stop = function(silent)
+        if not JokiState.active then return end
+        local cfg = JokiState.cfg
+        if not silent then JokiState.event("STOP", "- JOKI DIHENTIKAN (" .. tostring(cfg and cfg.pickaxeName) .. ")") end
+        JokiState.active, JokiState.cfg, JokiState.doneSent = false, nil, false
+        is_monitoring = false
+        is_farm_stopped = false
+        autoBuyEnabled = false
+        buyStatus = "None"
+        activeProfileName = "None"
+        clearState()
+        idleLastPos = nil
+        idleTimeAccum = 0
+        isRespawningIdle = false
+        isAutoRespawnLocked = false
+        UI.AutoRespawn.SetLocked(false)
+        if JokiState.refresh then JokiState.refresh() end
+    end
+
+    JokiState.start = function(cfg)
+        if not cfg then return end
+        -- matikan profil monitor biasa (tanpa memanggil callback-nya)
+        for _, tog in ipairs(monitorToggles) do if tog.SetState then tog.SetState(false) end end
+        JokiState.active, JokiState.cfg, JokiState.doneSent = true, cfg, false
+        targetIncome = 0
+        targetSpeedValue = 0
+        is_speed_done = true      -- v49: lewati fase speed → langsung fase kapak
+        is_income_done = true
+        is_buying_pickaxe = false
+        activeProfileName = cfg.name
+        is_farm_stopped = false
+        is_monitoring = true
+        if PetWatch.syncFarmState then PetWatch.syncFarmState(true) end
+        hasCheckedOwnership = false
+        hasCheckedTarget = false
+        lastTargetProbe = 0
+        prereqName, prereqId, prereqPrice = cfg.prereqName, cfg.prereqId, cfg.prereqPrice
+        isAutoRespawnLocked = true
+        isAutoRespawnIdle = true
+        UI.AutoRespawn.SetState(true)
+        UI.AutoRespawn.SetLocked(true)
+        targetPickaxeName = cfg.pickaxeName
+        targetPickaxeId = cfg.pickaxeId
+        targetBuyPrice = cfg.pickaxePrice
+        autoBuyEnabled = true
+        buyStatus = "Siap beli Galaxy dulu (ID: " .. tostring(prereqId) .. ")"
+        saveState(cfg.key)
+        startAutoFarm()   -- v49: auto farm wajib hidup selama joki
+        showNotif("🛠️ JOKI DIMULAI", "Target kapak " .. cfg.pickaxeName .. " (" .. formatNumber(cfg.pickaxePrice) .. ") · auto farm selalu hidup", 5)
+        lastWebhookTime = os.time()
+        task.spawn(function() JokiState.event("START", "+ JOKI DIMULAI (" .. cfg.pickaxeName .. ")") end)
+        if JokiState.refresh then JokiState.refresh() end
+    end
+
+    JokiState.startById = function(id)
+        local idx = idxOfId(tonumber(id))
+        if idx then JokiState.start(productCfg(idx)) return true end
+        return false
+    end
+
+    -- ── kartu joki aktif ──
+    local ActiveCard = Instance.new("Frame", JokiTab)
+    ActiveCard.Size = UDim2.new(1, 0, 0, 62)
+    ActiveCard.BackgroundColor3 = Colors.GlassPanel
+    ActiveCard.BorderSizePixel = 0
+    Instance.new("UICorner", ActiveCard).CornerRadius = UDim.new(0, 10)
+    local ACStroke = Instance.new("UIStroke", ActiveCard)
+    ACStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    ACStroke.Thickness = 1
+    ACStroke.Color = Colors.Border
+    local ACIcon = MakeIcon(ActiveCard, "crown", 18, Colors.Accent)
+    ACIcon.Position = UDim2.new(0, 12, 0, 12)
+    local ACTitle = NewLabel(ActiveCard, "Belum ada joki aktif", 13, Enum.Font.GothamBold, Colors.Text)
+    ACTitle.Size = UDim2.new(1, -150, 0, 18)
+    ACTitle.Position = UDim2.new(0, 38, 0, 10)
+    ACTitle.TextTruncate = Enum.TextTruncate.AtEnd
+    local ACSub = NewLabel(ActiveCard, "Pilih produk di bawah untuk mulai", 10, Enum.Font.Gotham, Colors.TextDim)
+    ACSub.Size = UDim2.new(1, -150, 0, 14)
+    ACSub.Position = UDim2.new(0, 38, 0, 30)
+    ACSub.TextTruncate = Enum.TextTruncate.AtEnd
+    local ACUser = NewLabel(ActiveCard, "@" .. player.Name, 10, Enum.Font.Gotham, Colors.TextDim)
+    ACUser.Size = UDim2.new(1, -150, 0, 12)
+    ACUser.Position = UDim2.new(0, 38, 0, 44)
+    ACUser.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local StopBtn = Instance.new("TextButton", ActiveCard)
+    StopBtn.Size = UDim2.new(0, 96, 0, 28)
+    StopBtn.Position = UDim2.new(1, -108, 0.5, -14)
+    StopBtn.BackgroundColor3 = Colors.Tile
+    StopBtn.AutoButtonColor = false
+    StopBtn.Text = "Hentikan joki"
+    StopBtn.Font = Enum.Font.GothamMedium
+    StopBtn.TextSize = 11
+    StopBtn.TextColor3 = Colors.Danger
+    Instance.new("UICorner", StopBtn).CornerRadius = UDim.new(0, 8)
+    StopBtn.MouseButton1Click:Connect(function()
+        if JokiState.active then
+            JokiState.stop(false)
+            showNotif("🛑 JOKI DIHENTIKAN", "Monitor & auto buy dimatikan", 3)
+        end
+    end)
+
+    local ListCap = NewLabel(JokiTab, "Produk joki (Celestial s/d kapak terbaru)", 11, Enum.Font.GothamBold, Colors.Accent)
+    ListCap.Size = UDim2.new(1, 0, 0, 16)
+    ListCap.Position = UDim2.new(0, 0, 0, 70)
+
+    local List = Instance.new("ScrollingFrame", JokiTab)
+    List.Size = UDim2.new(1, 0, 1, -92)
+    List.Position = UDim2.new(0, 0, 0, 90)
+    List.BackgroundTransparency = 1
+    StyleScrollbar(List)
+    local LL = Instance.new("UIListLayout", List)
+    LL.Padding = UDim.new(0, 4)
+    LL.SortOrder = Enum.SortOrder.LayoutOrder
+
+    local rows = {}
+    local function buildRows()
+        for _, r in ipairs(rows) do r.btn:Destroy() end
+        rows = {}
+        local first = firstProductIdx()
+        for idx = #PICKAXE_DB, first, -1 do   -- terbaru (Max) di atas
+            local cfg = productCfg(idx)
+            if cfg then
+                local B = Instance.new("TextButton")
+                B.Size = UDim2.new(1, -6, 0, 40)
+                B.BackgroundColor3 = Colors.GlassPanel
+                B.AutoButtonColor = false
+                B.Text = ""
+                B.LayoutOrder = #PICKAXE_DB - idx
+                B.Parent = List
+                Instance.new("UICorner", B).CornerRadius = UDim.new(0, 8)
+                local St = Instance.new("UIStroke", B)
+                St.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+                St.Thickness = 1
+                St.Color = Colors.Border
+                local Ic = MakeIcon(B, "pickaxe", 15, Colors.Accent)
+                Ic.Position = UDim2.new(0, 10, 0.5, -7)
+                local N = NewLabel(B, cfg.pickaxeName .. (cfg.isMax and "  (Max)" or ""), 12, Enum.Font.GothamMedium, Colors.Text)
+                N.Size = UDim2.new(1, -150, 0, 16)
+                N.Position = UDim2.new(0, 32, 0, 5)
+                N.TextTruncate = Enum.TextTruncate.AtEnd
+                local D = NewLabel(B, "Beli kapak · auto farm selalu hidup", 10, Enum.Font.Gotham, Colors.TextDim)
+                D.Size = UDim2.new(1, -150, 0, 14)
+                D.Position = UDim2.new(0, 32, 0, 21)
+                local P = NewLabel(B, PICKAXE_DB[idx].priceStr or "", 11, Enum.Font.GothamBold, Colors.Amber, Enum.TextXAlignment.Right)
+                P.Size = UDim2.new(0, 100, 1, 0)
+                P.Position = UDim2.new(1, -110, 0, 0)
+                B.MouseButton1Click:Connect(function()
+                    local fresh = productCfg(idx)   -- ambil target terbaru dari Pengaturan
+                    JokiState.start(fresh)
+                end)
+                table.insert(rows, { btn = B, stroke = St, name = N, id = cfg.pickaxeId })
+            end
+        end
+    end
+    buildRows()
+
+    JokiState.refresh = function()
+        local cfg = JokiState.active and JokiState.cfg
+        if cfg then
+            ACTitle.Text = "Joki " .. cfg.pickaxeName
+            ACSub.Text = "Beli " .. cfg.pickaxeName .. " (" .. formatNumber(cfg.pickaxePrice) .. ") · auto farm selalu hidup"
+            ACStroke.Color = Colors.Accent
+        else
+            ACTitle.Text = "Belum ada joki aktif"
+            ACSub.Text = "Pilih produk di bawah untuk mulai"
+            ACStroke.Color = Colors.Border
+        end
+        StopBtn.Visible = cfg and true or false
+        for _, r in ipairs(rows) do
+            local on = cfg and r.id == cfg.pickaxeId
+            r.btn.BackgroundColor3 = on and Colors.ChipOn or Colors.GlassPanel
+            r.stroke.Color = on and Colors.Accent or Colors.Border
+            r.name.TextColor3 = on and Colors.Accent or Colors.Text
+        end
+    end
+    JokiState.refresh()
+end
+
 -- ── Navigasi tab ────────────────────────────────────────
 ShowTab = function(name)
     HomeTab.Visible = (name == "home")
     AutoBuyTab.Visible = (name == "buy")
     SettingsTab.Visible = (name == "settings")
+    JokiTab.Visible = (name == "joki")
     SetHomeActive(name == "home")
     SetAutoBuyActive(name == "buy")
     SetSettingsActive(name == "settings")
-    local titles = { home = "Monitor", buy = "Auto Buy", settings = "Pengaturan" }
+    SetJokiActive(name == "joki")
+    local titles = { home = "Monitor", buy = "Auto Buy", settings = "Pengaturan", joki = "Joki" }
     UI.PageTitle.Text = titles[name] or ""
 end
 HomeBtn.MouseButton1Click:Connect(function() ShowTab("home") end)
 AutoBuyBtn.MouseButton1Click:Connect(function() ShowTab("buy") end)
 SettingsBtn.MouseButton1Click:Connect(function() ShowTab("settings") end)
+JokiBtn.MouseButton1Click:Connect(function() ShowTab("joki") end)
 ShowTab("home")
 
 -- ── Tombol mengambang ────────────────────
@@ -2641,8 +2884,8 @@ local function ApplyView(v)
     if is_monitoring then
         UI.CardName.Text = tostring(activeProfileName)
         UI.CardSub.Text = tostring(PetWatch.caption or ("Kapak target: " .. tostring(targetPickaxeName)))
-        UI.TgtInc.Text = formatNumber(targetIncome)
-        UI.TgtSpd.Text = formatNumber(targetSpeedValue)
+        UI.TgtInc.Text = JokiState.active and "—" or formatNumber(targetIncome)
+        UI.TgtSpd.Text = JokiState.active and "—" or formatNumber(targetSpeedValue)
     elseif autoBuyEnabled then
         UI.CardName.Text = "Auto Buy"
         UI.CardSub.Text = tostring(targetPickaxeName)
@@ -2882,8 +3125,12 @@ do
             end
         end
 
+        -- v49: joki aktif → farm selalu hidup
+        if JokiState.active then
+            desired = true
+            reason = "joki " .. tostring(JokiState.cfg and JokiState.cfg.pickaxeName)
         -- v47: speed sudah tercapai → farm selalu hidup
-        if is_speed_done then
+        elseif is_speed_done then
             desired = true
             reason = "speed tercapai (" .. formatNumber(targetSpeedValue) .. ")"
         end
@@ -2924,6 +3171,13 @@ task.spawn(function()
             if not is_speed_done and targetSpeedValue > 0 and speed_num >= targetSpeedValue then
                 is_speed_done = true
                 showNotif("⚡ SPEED TERCAPAI", "Speed " .. formatNumber(speed_num) .. " / " .. formatNumber(targetSpeedValue), 4)
+            end
+            -- v48: joki selesai (kapak target sudah dibeli / dimiliki) → webhook DONE sekali
+            if JokiState.active and not JokiState.doneSent and not autoBuyEnabled
+                and (buyStatus:find("DIMILIKI") or buyStatus:find("Beli Sukses")) then
+                JokiState.doneSent = true
+                sendToDiscord(money_str, speed_str, "+ JOKI SELESAI (" .. tostring(JokiState.cfg and JokiState.cfg.pickaxeName) .. ")")
+                showNotif("✅ JOKI SELESAI", tostring(JokiState.cfg and JokiState.cfg.pickaxeName) .. " sudah dimiliki", 6)
             end
             local okPW, changed = pcall(PetWatch.update)
             is_farm_stopped = not PetWatch.farmActive
@@ -3210,6 +3464,12 @@ task.spawn(function()
 
     -- 2) Pulihkan profil monitor (profil bisa menimpa target Auto Buy)
     local savedProfile = loadState()
+    -- v48: joki tersimpan → lanjutkan joki yang sama
+    if type(savedProfile) == "string" and savedProfile:match("^joki:") then
+        if JokiState.startById and JokiState.startById(savedProfile:match("^joki:(%d+)")) then
+            savedProfile = nil
+        end
+    end
     if savedProfile and savedProfile ~= "None" then
         for i, cfg in ipairs(CONFIG_DB) do
             if (cfg.key == savedProfile or cfg.name == savedProfile) and monitorToggles[i] then
