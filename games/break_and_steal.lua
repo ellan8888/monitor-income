@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (v46 - auto farm hidup/mati berdasarkan value pet)
+-- ✨ V-Ziir0 Hub: Break & Steal (v47 - speed tercapai = auto farm selalu hidup)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ SISTEM ANTI-DOUBLE
@@ -1654,7 +1654,7 @@ do
     local Title = NewLabel(Sidebar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
     Title.Size = UDim2.new(0, 80, 0, 18)
     Title.Position = UDim2.new(0, 56, 0, 15)
-    local Ver = NewLabel(Sidebar, "v46", 11, Enum.Font.Gotham, Colors.TextDim)
+    local Ver = NewLabel(Sidebar, "v47", 11, Enum.Font.Gotham, Colors.TextDim)
     Ver.Size = UDim2.new(0, 80, 0, 14)
     Ver.Position = UDim2.new(0, 56, 0, 33)
 
@@ -2714,6 +2714,7 @@ end)
 --   Base-mu dicari otomatis di Workspace.Plots (nama/UserId di atribut, Value,
 --   atau papan nama). Cadangan: Pengaturan > Base saya > "Set base = plot terdekat".
 --   Kalau base belum diketahui, farm dibiarkan HIDUP.
+--   v47: kalau target SPEED sudah tercapai, farm SELALU HIDUP (aturan pet diabaikan).
 -- ═══════════════════════════════════════════════════════
 do
     local SUF = { [""] = 1, K = 1e3, M = 1e6, B = 1e9, T = 1e12, QA = 1e15, QI = 1e18, SX = 1e21, SP = 1e24 }
@@ -2879,6 +2880,12 @@ do
                 reason = "tidak ada pet > base min $" .. formatNumber(baseMin or 0) .. "/s"
                     .. (best and (" (terbaik $" .. formatNumber(best) .. "/s)") or "")
             end
+        end
+
+        -- v47: speed sudah tercapai → farm selalu hidup
+        if is_speed_done then
+            desired = true
+            reason = "speed tercapai (" .. formatNumber(targetSpeedValue) .. ")"
         end
 
         PetWatch.caption = (PetWatch.farmActive and "Farm ON · " or "Farm OFF · ") .. reason
