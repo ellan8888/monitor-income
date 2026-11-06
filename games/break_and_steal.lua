@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- ✨ V-Ziir0 Hub: Break & Steal (v49 - joki: fokus beli kapak, auto farm selalu hidup)
+-- ✨ V-Ziir0 Hub: Break & Steal (v50 - fix auto add teman di HP / executor lain)
 -- ═══════════════════════════════════════════════════════
 
 -- ⭐ SISTEM ANTI-DOUBLE
@@ -1670,7 +1670,7 @@ do
     local Title = NewLabel(Sidebar, "V-Ziir0", 15, Enum.Font.GothamBold, Colors.Text)
     Title.Size = UDim2.new(0, 80, 0, 18)
     Title.Position = UDim2.new(0, 56, 0, 15)
-    local Ver = NewLabel(Sidebar, "v49", 11, Enum.Font.Gotham, Colors.TextDim)
+    local Ver = NewLabel(Sidebar, "v50", 11, Enum.Font.Gotham, Colors.TextDim)
     Ver.Size = UDim2.new(0, 80, 0, 14)
     Ver.Position = UDim2.new(0, 56, 0, 33)
 
@@ -2853,7 +2853,7 @@ local function computeView()
     local money_num, speed_num = parseNumber(money_str), parseNumber(speed_str)
     local incomeOK = is_income_done or (targetIncome > 0 and money_num >= targetIncome)
     local incomePhaseDone = true   -- v46: farm diatur pet, fase income tidak menahan alur
-    local speedOK = is_speed_done or (targetSpeedValue > 0 and speed_num >= targetSpeedValue)
+    local speedOK = JokiState.active or is_speed_done or (targetSpeedValue > 0 and speed_num >= targetSpeedValue)
 
     local incPct = incomeOK and 1 or pctOf(money_num, targetIncome)
     local spdPct = speedOK and 1 or pctOf(speed_num, targetSpeedValue)
@@ -3340,14 +3340,22 @@ do
                 Body = body and HttpService:JSONEncode(body) or nil,
             })
         end)
-        if not ok or type(res) ~= "table" then return nil end
-        local code = tonumber(res.StatusCode) or 0
-        if code < 200 or code >= 300 then
+        if not ok or type(res) ~= "table" then
+            warn("[Auto Add] API " .. method .. " gagal: " .. tostring(res))
+            return nil
+        end
+        -- v50: tiap executor beda nama kolom (StatusCode / Status / status_code, Body / body)
+        local code = tonumber(res.StatusCode or res.Status or res.status_code or res.statusCode)
+        local body = res.Body or res.body or ""
+        local okJ, data = pcall(function() return HttpService:JSONDecode(body) end)
+        if not okJ or type(data) ~= "table" then data = nil end
+        local success = (code and code >= 200 and code < 300)
+            or (code == nil and data ~= nil and data.success ~= false)   -- executor tanpa kode status
+        if not success then
             warn("[Auto Add] API " .. method .. " gagal (HTTP " .. tostring(code) .. ")")
             return nil
         end
-        local okJ, data = pcall(function() return HttpService:JSONDecode(res.Body or "") end)
-        return okJ and data or nil
+        return data
     end
     local function registerOnline()
         apiCall("POST", { user_id = player.UserId, username = player.Name })
@@ -3358,6 +3366,12 @@ do
             local fresh = {}
             for _, a in ipairs(data.accounts) do
                 if a.user_id then fresh[tostring(a.user_id)] = true end
+            end
+            local n = 0
+            for _ in pairs(fresh) do n = n + 1 end
+            if not PetWatch._onlineLogged then
+                PetWatch._onlineLogged = true
+                print("👥 [Auto Add] Daftar online terbaca: " .. n .. " akun")
             end
             onlineIds = fresh
         end
